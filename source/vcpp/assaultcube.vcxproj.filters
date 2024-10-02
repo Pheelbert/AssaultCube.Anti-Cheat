@@ -29,6 +29,9 @@
     <Filter Include="sound">
       <UniqueIdentifier>{f1b104ac-e944-435e-8b70-99868aa7c7e4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="ac">
+      <UniqueIdentifier>{0142a293-e81e-456a-a76e-19336a054f31}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\command.h">
@@ -98,6 +101,18 @@
       <Filter>headers</Filter>
     </ClInclude>
     <ClInclude Include="..\src\world.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\FileIntegrityChecker.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\FileUtil.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\MemoryIntegrityChecker.h">
+      <Filter>headers</Filter>
+    </ClInclude>
+    <ClInclude Include="..\src\HashUtil.h">
       <Filter>headers</Filter>
     </ClInclude>
   </ItemGroup>
@@ -388,6 +403,18 @@
     </ClCompile>
     <ClCompile Include="..\src\soundscheduler.cpp">
       <Filter>sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\FileIntegrityChecker.cpp">
+      <Filter>ac</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\FileUtil.cpp">
+      <Filter>ac</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\HashUtil.cpp">
+      <Filter>ac</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\MemoryIntegrityChecker.cpp">
+      <Filter>ac</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

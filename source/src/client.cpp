@@ -2,6 +2,9 @@
 
 #include "cube.h"
 #include "bot/bot.h"
+#include "FileIntegrityChecker.h"
+#include "MemoryIntegrityChecker.h"
+#include "FileUtil.h"
 
 VAR(connected, 1, 0, 0);
 
@@ -385,11 +388,70 @@ void c2skeepalive()
 
 extern string masterpwd;
 bool sv_pos = true;
+static int lastHashSendTime = 0;
 
 void c2sinfo(playerent *d)                  // send update to the server
 {
     if(d->clientnum<0) return;              // we haven't had a welcome message from the server yet
     if(totalmillis-lastupdate<40) return;    // don't update faster than 25fps
+
+    if (totalmillis - lastHashSendTime >= 10000) // 10000 ms = 10 seconds
+    {
+        int hashIdentifier = -1;
+        PhantiCheat::FileIntegrityChecker fileIntegrityChecker;
+        std::vector<std::string> filesToVerify = {
+            "ac_client.exe" // HASH_FILE_AC_DOT_EXE
+        };
+
+        std::string executableDirectory = PhantiCheat::FileUtil::getExecutableDirectory();
+        for (auto& filePath : filesToVerify) {
+            filePath = PhantiCheat::FileUtil::buildAbsolutePath(executableDirectory, filePath);
+        }
+
+        // TODO: Only return the hashes without the associated file -- order matters
+        auto fileHashes = fileIntegrityChecker.checkFileIntegrity(filesToVerify);
+        for (const auto& fileHashPair : fileHashes) {
+            hashIdentifier++;
+            packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+            putint(p, SV_HASHVERIFY);
+            putint(p, hashIdentifier);
+            sendstring(fileHashPair.second.c_str(), p);
+            sendpackettoserv(1, p.finalize());
+        }
+
+        PhantiCheat::MemoryIntegrityChecker memoryIntegrityChecker;
+        std::vector<std::string> modulesToVerify = {
+            "ac_client.exe"
+        };
+
+        //std::vector<std::string> loadedModules = memoryChecker.listCurrentExecutableModules();
+        //for (const auto& module : loadedModules) {
+        //    std::cout << "Loaded Module: " << module << std::endl;
+        //}
+
+        //std::vector<std::string> moduleSections = memoryChecker.listModuleSections(moduleToVerify);
+        //for (const auto& section : moduleSections) {
+        //    std::cout << "Module " << moduleToVerify << " Section: " << section << std::endl;
+        //}
+
+        std::vector<std::string> sectionsToVerify = {
+            ".text" // Contains the actual machine code
+        };
+
+        for (const auto& module : modulesToVerify) {
+            for (const auto& section : sectionsToVerify) {
+                std::string sectionHash = memoryIntegrityChecker.hashModuleSection(module, section);
+                hashIdentifier++;
+                packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+                putint(p, SV_HASHVERIFY);
+                putint(p, hashIdentifier);
+                sendstring(sectionHash.c_str(), p);
+                sendpackettoserv(1, p.finalize());
+            }
+        }
+
+        lastHashSendTime = totalmillis;
+    }
 
     if(d->state==CS_ALIVE || d->state==CS_EDITING)
     {

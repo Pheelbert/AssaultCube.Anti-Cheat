@@ -3362,6 +3362,34 @@ void process(ENetPacket *packet, int sender, int chan)
 
         switch(type)
         {
+            case SV_HASHVERIFY:
+            {
+                const char* hashList[HASH_VERIFICATION_IDENTIFIER_COUNT] = {
+                    "0439d24a71fa03824b1371a820922ad883c8cf16adc322a3ae361e43626e1c03", // HASH_FILE_AC_DOT_EXE
+                    "886c16bf58c32bf39ba242ac8ce304eb45bea55f7f1dc00172c5b81335d326db"  // HASH_MEMORY_DOT_TEXT
+                };
+
+                int identifierEnum = getint(p);
+                if (identifierEnum < 0 || identifierEnum >= HASH_VERIFICATION_IDENTIFIER_COUNT)
+                {
+                    mlog(ACLOG_WARNING, "[%s] %s provided an invalid hash identifier enum: %d", cl->hostname, cl->name, identifierEnum);
+                    disconnect_client(cl->clientnum, DISC_AUTOKICK);
+                    break;
+                }
+
+                char clientHash[65];
+                getstring(clientHash, p, sizeof(clientHash));
+                clientHash[sizeof(clientHash) - 1] = '\0';
+
+                const char* expectedHash = hashList[identifierEnum];
+                if (strcmp(clientHash, expectedHash) != 0)
+                {
+                   mlog(ACLOG_WARNING, "[%s] %s provided an invalid hash %s for identifier enum %d", cl->hostname, cl->name, clientHash, identifierEnum);
+                   disconnect_client(cl->clientnum, DISC_AUTOKICK);
+                }
+                break;
+            }
+
             case SV_TEAMTEXTME:
             case SV_TEAMTEXT:
                 getstring(text, p);
