@@ -162,6 +162,7 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -210,6 +211,7 @@
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
       <CompileAs>Default</CompileAs>
       <EnablePREfast>false</EnablePREfast>
+      <LanguageStandard>stdcpp14</LanguageStandard>
     </ClCompile>
     <ResourceCompile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -403,7 +405,10 @@
     <ClInclude Include="..\src\crypto_tools.h" />
     <ClInclude Include="..\src\cube.h" />
     <ClInclude Include="..\src\entity.h" />
+    <ClInclude Include="..\src\FileIntegrityChecker.h" />
+    <ClInclude Include="..\src\FileUtil.h" />
     <ClInclude Include="..\src\geom.h" />
+    <ClInclude Include="..\src\HashUtil.h" />
     <ClInclude Include="..\src\hudgun.h" />
     <CustomBuildStep Include="..\src\md2.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
@@ -413,6 +418,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone|Win32'">true</ExcludedFromBuild>
     </CustomBuildStep>
+    <ClInclude Include="..\src\MemoryIntegrityChecker.h" />
     <ClInclude Include="..\src\model.h" />
     <ClInclude Include="..\src\modelcache.h" />
     <ClInclude Include="..\src\platform.h" />
@@ -502,6 +508,10 @@
     <None Include="..\..\config\sounds.cfg" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\FileIntegrityChecker.cpp" />
+    <ClCompile Include="..\src\FileUtil.cpp" />
+    <ClCompile Include="..\src\HashUtil.cpp" />
+    <ClCompile Include="..\src\MemoryIntegrityChecker.cpp" />
     <ClCompile Include="..\src\rendercubes.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone|Win32'">true</ExcludedFromBuild>
