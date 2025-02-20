@@ -36,10 +36,18 @@ namespace PhantiCheat {
         // Locate the .text section
         PIMAGE_SECTION_HEADER pSectionHeader = IMAGE_FIRST_SECTION(pNtHeaders);
         for (int i = 0; i < pNtHeaders->FileHeader.NumberOfSections; ++i) {
-            if (strncmp((char*)pSectionHeader->Name, section.c_str(), section.length()) == 0) {
-                // Get the size and pointer to the .text section
+            char sectionName[9] = { 0 };
+            memcpy(sectionName, pSectionHeader->Name, 8);
+            if (strcmp(sectionName, section.c_str()) == 0) {
                 BYTE* textSectionData = (BYTE*)hModule + pSectionHeader->VirtualAddress;
-                DWORD textSectionSize = pSectionHeader->SizeOfRawData;
+                DWORD textSectionSize = (pSectionHeader->SizeOfRawData > pSectionHeader->Misc.VirtualSize)
+                  ? pSectionHeader->SizeOfRawData
+                  : pSectionHeader->Misc.VirtualSize;
+
+                if (textSectionSize == 0) {
+                    std::cerr << "Section has invalid size 0" << std::endl;
+                    return "";
+                }
 
                 // Use HashUtil to calculate the hash of the .text section
                 std::string textSectionHash = PhantiCheat::HashUtil::calculateHash(textSectionData, textSectionSize);

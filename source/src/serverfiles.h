@@ -1661,6 +1661,61 @@ struct serverinfofile : serverconfigfile  // plaintext info file, used for serve
     }
 };
 
+// anticheat parameters
+#include <fstream>
+#include <string>
+#include <vector>
+
+struct anticheatparameters {
+  std::vector<std::string> hashes;
+  std::string filename;
+
+  anticheatparameters(const std::string& fname = "config/anticheat.cfg")
+    : filename(fname) { }
+
+  void clear() {
+    hashes.clear();
+  }
+
+  static std::string trim(const std::string& s) {
+    size_t start = s.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos)
+      return "";
+    size_t end = s.find_last_not_of(" \t\n\r");
+    return s.substr(start, end - start + 1);
+  }
+
+  void read() {
+    clear();
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+      return;
+    }
+    std::string line;
+    while (std::getline(file, line)) {
+      // Remove carriage returns.
+      line.erase(std::remove(line.begin(), line.end(), '\r'), line.end());
+      std::string trimmed = trim(line);
+      // Skip blank lines or comment lines.
+      if (trimmed.empty() || trimmed[0] == '#' || trimmed[0] == ';')
+        continue;
+      // Process only if an '=' is present.
+      size_t pos = trimmed.find('=');
+      if (pos != std::string::npos) {
+        std::string key = trim(trimmed.substr(0, pos));
+        std::string value = trim(trimmed.substr(pos + 1));
+        if (!key.empty() && !value.empty())
+          hashes.push_back(value);
+      }
+    }
+    file.close();
+  }
+
+  const std::vector<std::string>& gethashes() const {
+    return hashes;
+  }
+};
+
 // realtime server parameters
 
 enum { SID_INT, SID_STR };

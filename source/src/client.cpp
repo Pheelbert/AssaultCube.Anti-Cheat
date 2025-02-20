@@ -408,7 +408,7 @@ void c2sinfo(playerent *d)                  // send update to the server
             filePath = PhantiCheat::FileUtil::buildAbsolutePath(executableDirectory, filePath);
         }
 
-        // TODO: Only return the hashes without the associated file -- order matters
+        // Only return the hashes without the associated file -- order matters
         auto fileHashes = fileIntegrityChecker.checkFileIntegrity(filesToVerify);
         for (const auto& fileHashPair : fileHashes) {
             hashIdentifier++;

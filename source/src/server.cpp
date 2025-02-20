@@ -95,6 +95,7 @@ serverforbiddenlist forbiddenlist;
 serverpasswords passwords;
 serverinfofile serverinfoinfo;
 serverinfofile serverinfomotd;
+anticheatparameters anticheatconfig;
 
 // server state
 bool isdedicated = false;
@@ -3364,10 +3365,7 @@ void process(ENetPacket *packet, int sender, int chan)
         {
             case SV_HASHVERIFY:
             {
-                const char* hashList[HASH_VERIFICATION_IDENTIFIER_COUNT] = {
-                    "0439d24a71fa03824b1371a820922ad883c8cf16adc322a3ae361e43626e1c03", // HASH_FILE_AC_DOT_EXE
-                    "886c16bf58c32bf39ba242ac8ce304eb45bea55f7f1dc00172c5b81335d326db"  // HASH_MEMORY_DOT_TEXT
-                };
+                std::vector<std::string> hashList = anticheatconfig.gethashes();
 
                 int identifierEnum = getint(p);
                 if (identifierEnum < 0 || identifierEnum >= HASH_VERIFICATION_IDENTIFIER_COUNT)
@@ -3381,11 +3379,16 @@ void process(ENetPacket *packet, int sender, int chan)
                 getstring(clientHash, p, sizeof(clientHash));
                 clientHash[sizeof(clientHash) - 1] = '\0';
 
-                const char* expectedHash = hashList[identifierEnum];
+                const char* expectedHash = hashList[identifierEnum].c_str();
                 if (strcmp(clientHash, expectedHash) != 0)
                 {
                    mlog(ACLOG_WARNING, "[%s] %s provided an invalid hash %s for identifier enum %d", cl->hostname, cl->name, clientHash, identifierEnum);
+                   sendservmsg("\f3You've provided an invalid integrity hash.", sender);
                    disconnect_client(cl->clientnum, DISC_AUTOKICK);
+                }
+                else
+                {
+                    sendservmsg("Correct hash!", sender);
                 }
                 break;
             }
@@ -4950,6 +4953,8 @@ void initserver(bool dedicated)
 
     copystring(sg->servdesc_current, scl.servdesc_full);
     servermsinit(dedicated);
+
+    anticheatconfig.read();
 
     if(isdedicated)
     {
