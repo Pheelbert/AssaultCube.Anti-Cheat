@@ -1,5 +1,7 @@
 // serverfiles.h
 
+#include <algorithm>
+
 // abuse globals to register server parameters
 extern int addservparint(const char *name, int minval, int cur, int maxval, const char *list[], int *storage, int *shadowstorage, void (*fun)(), bool logchanges, bool fromfile, const char *desc);
 extern bool addservparstr(const char *name, int minlen, int maxlen, int filt, const char *cur, char *storage, char *shadowstorage, void (*fun)(), bool logchanges, bool fromfile, const char *desc);
