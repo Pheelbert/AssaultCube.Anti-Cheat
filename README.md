@@ -39,19 +39,59 @@ Most of this README was directly copied from the
 [AssaultCube Homepage](https://assault.cubers.net), which should have everything
 you need in relation to AssaultCube.
 
-## Running the Server with Docker
+## Building the Client (Windows)
+
+### Prerequisites
+
+- **Visual Studio 2019+** (or Visual Studio Build Tools) with the **C++ Desktop** workload installed
+
+### Using build.bat
+
+Open a command prompt in the repository root and run:
+
+```batch
+build.bat                  # Build Release client (default)
+build.bat debug            # Build Debug client
+build.bat release          # Build Release client (explicit)
+build.bat server           # Build Release server (Standalone)
+build.bat server debug     # Build Debug server (Standalone Debug)
+build.bat all              # Build Release client + server
+build.bat all debug        # Build Debug client + server
+build.bat clean            # Clean all build artifacts
+```
+
+The script auto-detects your MSBuild installation via `vswhere.exe`. Build output is placed in `bin_win32/`.
+
+## Server Deployment with Docker
+
+Docker builds the server from source on Linux (Ubuntu 22.04) and runs it alongside a web monitoring dashboard.
 
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
 
-### Quick Start
+### Architecture
+
+`docker compose` starts two services:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **acserver** | UDP 28763 (game), UDP 28764 (server info) | AssaultCube game server |
+| **dashboard** | TCP 8080 | Web dashboard for live player stats and anti-cheat telemetry |
+
+### Deploy (first time)
+
+Build images and start both services in the background:
 
 ```bash
 docker compose up -d
 ```
 
-This builds the server image and starts it in the background. The server listens on **UDP ports 28763** (game) and **28764** (server info).
+Verify the services are running:
+
+```bash
+docker compose ps
+```
 
 ### Configuration
 
@@ -65,32 +105,49 @@ Server config files live in the `config/` directory and are bind-mounted into th
 | `config/serverblacklist.cfg` | IP blacklist |
 | `config/serverparameters.cfg` | Runtime parameters (re-read every 60 s) |
 
-After editing config, restart the server:
+After editing config, restart the server to pick up the changes:
 
 ```bash
-docker compose restart
+docker compose restart acserver
 ```
 
-### Rebuilding After Code Changes
+### Redeploy (after code changes)
 
-When you modify server source code, rebuild and restart:
+When you modify server source code, rebuild the images and restart:
 
 ```bash
 docker compose up -d --build
 ```
 
+To rebuild only a specific service:
+
+```bash
+docker compose up -d --build acserver    # rebuild server only
+docker compose up -d --build dashboard   # rebuild dashboard only
+```
+
 ### Viewing Logs
 
 ```bash
-docker compose logs -f
+docker compose logs -f              # all services
+docker compose logs -f acserver     # server only
+docker compose logs -f dashboard    # dashboard only
 ```
 
 Server file logs are also persisted to the `logs/` directory on the host.
 
-### Stopping the Server
+### Take Down
+
+Stop and remove all containers:
 
 ```bash
 docker compose down
+```
+
+To also remove the shared data volume:
+
+```bash
+docker compose down -v
 ```
 
 ## Contributing:
