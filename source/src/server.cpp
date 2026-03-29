@@ -3435,6 +3435,10 @@ void process(ENetPacket *packet, int sender, int chan)
                         {
                             const AcHeartbeatData *hb = (const AcHeartbeatData *)&rawData[0];
                             cl->hasKernelAC = true;
+                            cl->acDriverVersion = (int)hb->DriverVersion;
+                            cl->acUptimeSeconds = (int)hb->UptimeSeconds;
+                            cl->acScanCount = (int)hb->ScanCount;
+                            cl->acHeartbeatCount++;
                             mlog(ACLOG_VERBOSE, "[%s] %s kernel AC heartbeat: driver v%u, uptime %us, scans %u",
                                  cl->hostname, cl->name,
                                  hb->DriverVersion,
@@ -4697,7 +4701,11 @@ void exportdashboardjson()
         fprintf(f, "        \"has_kernel_ac\": %s,\n", c.hasKernelAC ? "true" : "false");
         fprintf(f, "        \"windows_major\": %d,\n", c.windowsMajor);
         fprintf(f, "        \"windows_minor\": %d,\n", c.windowsMinor);
-        fprintf(f, "        \"windows_build\": %d\n", c.windowsBuild);
+        fprintf(f, "        \"windows_build\": %d,\n", c.windowsBuild);
+        fprintf(f, "        \"driver_version\": %d,\n", c.acDriverVersion);
+        fprintf(f, "        \"uptime_seconds\": %d,\n", c.acUptimeSeconds);
+        fprintf(f, "        \"scan_count\": %d,\n", c.acScanCount);
+        fprintf(f, "        \"heartbeat_count\": %d\n", c.acHeartbeatCount);
         fprintf(f, "      }\n");
         fprintf(f, "    }");
     }

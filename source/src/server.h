@@ -281,6 +281,8 @@ struct client                   // server side version of "dynent" type
     // Kernel anti-cheat telemetry
     bool hasKernelAC;
     int windowsMajor, windowsMinor, windowsBuild;
+    int acDriverVersion, acUptimeSeconds, acScanCount;
+    int acHeartbeatCount;
 
     // Session-cumulative stats (not reset between rounds)
     int session_frags, session_deaths, session_shotcount, session_hits;
@@ -344,6 +346,7 @@ struct client                   // server side version of "dynent" type
         ispaused = 0;
         hasKernelAC = false;
         windowsMajor = windowsMinor = windowsBuild = 0;
+        acDriverVersion = acUptimeSeconds = acScanCount = acHeartbeatCount = 0;
         session_frags = session_deaths = session_shotcount = session_hits = 0;
     }
 
