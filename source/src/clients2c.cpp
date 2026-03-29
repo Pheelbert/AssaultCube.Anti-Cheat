@@ -568,10 +568,10 @@ void parsemessages(int cn, playerent *d, ucharbuf &p, bool demo = false)
                 loopi(2) d->setskin(i, getint(p));
                 d->team = getint(p);
 
-                d->maxroll = (float)clamp(getint(p), 0, ROLLMOVMAX);
-                d->maxrolleffect = (float)clamp(getint(p), 0, ROLLEFFMAX);
-                d->ffov = (float)clamp(getint(p), 75, 120);
-                d->scopefov = (float)clamp(getint(p), 5, 60);
+                d->maxroll = (float)CLAMP(getint(p), 0, ROLLMOVMAX);
+                d->maxrolleffect = (float)CLAMP(getint(p), 0, ROLLEFFMAX);
+                d->ffov = (float)CLAMP(getint(p), 75, 120);
+                d->scopefov = (float)CLAMP(getint(p), 5, 60);
                 d->address = getint(p); // partial IP address
 
                 if(m_flags_) loopi(2)

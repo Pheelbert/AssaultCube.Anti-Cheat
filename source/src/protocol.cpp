@@ -563,7 +563,7 @@ float decodepitch(int r)
     if(r > thres) r = r * 4 - thres * 3;
     else if(r < -thres) r = r * 4 + thres * 3;
     float p = float(r) * MAXPITCH / (1 << 24);
-    return clamp(p, -MAXPITCH, MAXPITCH);
+    return CLAMP(p, -MAXPITCH, MAXPITCH);
 }
 
 int encodeyaw(float y) // yaw value quantisation: simple rounded integer

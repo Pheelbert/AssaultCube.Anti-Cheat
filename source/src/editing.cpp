@@ -817,7 +817,7 @@ void renderhudtexturepreviews()
         int atype = lasttype == 3 ? 1 : lasttype;
         int idx = curedittex[atype];
         if(idx < 0) idx = 0;
-        int startidx = clamp(idx - 2, 0, 251);
+        int startidx = CLAMP(idx - 2, 0, 251);
         loopi(5) renderhudtexturepreview(hdr.texlists[atype][startidx + i], i, startidx + i == idx);
     }
 }

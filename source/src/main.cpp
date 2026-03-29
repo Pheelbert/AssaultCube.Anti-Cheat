@@ -485,7 +485,7 @@ void screenshotpreview(int *res)
 {
     static int lastres = 240;
     defformatstring(buf)("packages" PATHDIVS "maps" PATHDIVS "%spreview" PATHDIVS "%s.jpg", securemapcheck(getclientmap(), false) ? "official" PATHDIVS : "", behindpath(getclientmap()));
-    mapscreenshot(buf, false, 1, 1.0f, (lastres = clamp(((*res ? *res : lastres) / 48) * 48, 144, 480)), 80);
+    mapscreenshot(buf, false, 1, 1.0f, (lastres = CLAMP(((*res ? *res : lastres) / 48) * 48, 144, 480)), 80);
     reloadtexture(*textureload(buf, 3));
 }
 COMMAND(screenshotpreview, "i");
@@ -503,8 +503,8 @@ void updatescreensize()
 void screenres(int w, int h)
 {
     if(!screen) return;
-    scr_w = clamp(w, SCR_MINW, SCR_MAXW);
-    scr_h = clamp(h, SCR_MINH, SCR_MAXH);
+    scr_w = CLAMP(w, SCR_MINW, SCR_MAXW);
+    scr_h = CLAMP(h, SCR_MINH, SCR_MAXH);
     if(fullscreendesktop)
     {
         scr_w = min(scr_w, desktopw);
@@ -947,8 +947,8 @@ void checkinput()
                         EVENTDEBUG(concatformatstring(eb, " SDL_WINDOWEVENT_RESIZED %d x %d", event.window.data1, event.window.data2));
                         if(!fullscreendesktop || !(SDL_GetWindowFlags(screen) & SDL_WINDOW_FULLSCREEN))
                         {
-                            scr_w = clamp(event.window.data1, SCR_MINW, SCR_MAXW);
-                            scr_h = clamp(event.window.data2, SCR_MINH, SCR_MAXH);
+                            scr_w = CLAMP(event.window.data1, SCR_MINW, SCR_MAXW);
+                            scr_h = CLAMP(event.window.data2, SCR_MINH, SCR_MAXH);
                         }
                         break;
 

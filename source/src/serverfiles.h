@@ -208,7 +208,7 @@ struct servermap  // in-memory version of a map file on a server
                 maprevision = h->maprevision;
                 lilswap(&h->waterlevel, 1);
                 waterlevel = version >= 4 ? h->waterlevel : -100000;
-                restofhead = clamp(headersize - sizeof_header, 0, MAXHEADEREXTRA);
+                restofhead = CLAMP(headersize - sizeof_header, 0, MAXHEADEREXTRA);
                 if(f->read(staticbuffer, restofhead) != restofhead) err = "map file truncated";
             }
         }
@@ -801,8 +801,8 @@ int readserverconfigsthread(void *data)
 
 void configsetvalues::add(configsetvalues u)
 {
-    weight = clamp(weight + u.weight, -100, 100);
-    repeat = clamp(repeat + u.repeat, -100, 100);
+    weight = CLAMP(weight + u.weight, -100, 100);
+    repeat = CLAMP(repeat + u.repeat, -100, 100);
     for(int i = 2; i < CONFIG_MAXPAR; i++) if(u.par[i] >= 0) par[i] = u.par[i];
 }
 
@@ -815,7 +815,7 @@ bool configsetvalues::parse(char *keyval) // parse one key:value pair
         {
             if((k = strtok_r(NULL, ":", &kb)))
             {
-                par[i] = clamp(atoi(k), -100, 100);
+                par[i] = CLAMP(atoi(k), -100, 100);
                 return true;
             }
         }
@@ -902,7 +902,7 @@ struct servermaprot : serverconfigfile
                 {
                     c = cempty;
                     char *e = strchr(l, '*');
-                    c.asterisk = e ? clamp(int(e - l), 0, MAXMAPNAMELEN) : -1;
+                    c.asterisk = e ? CLAMP(int(e - l), 0, MAXMAPNAMELEN) : -1;
                     filtertext(c.mapname, behindpath(l), FTXT__MAPNAME, MAXMAPNAMELEN);
                     bool haskeywords = false;
                     l = strtok_r(NULL, " ", &b);

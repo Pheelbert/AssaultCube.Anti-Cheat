@@ -18,7 +18,7 @@ struct console : consolebuffer<cline>
     void setconskip(int n)
     {
         int visible_lines = (int)(min(fullconsole ? ((VIRTH*2 - 2*CONSPAD - 2*FONTH/3)*(fullconsole==1 ? altconsize : fullconsize))/100 : FONTH*consize, (VIRTH*2 - 2*CONSPAD - 2*FONTH/3))/ (CONSPAD + 2*FONTH/3)) - 1;
-        conskip = clamp(conskip + n, 0, clamp(conlines.length()-visible_lines, 0, conlines.length()));
+        conskip = CLAMP(conskip + n, 0, CLAMP(conlines.length()-visible_lines, 0, conlines.length()));
     }
 
     static const int WORDWRAP = 80;

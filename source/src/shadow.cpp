@@ -141,10 +141,10 @@ static void addshadowtiles(float x1, float y1, float x2, float y2)
     shadowx2 = max(shadowx2, x2);
     shadowy2 = max(shadowy2, y2);
 
-    int tx1 = clamp(int(floor((y1 + 1)/2 * SHADOWCOLUMNS)), 0, SHADOWCOLUMNS - 1),
-        ty1 = clamp(int(floor((x1 + 1)/2 * SHADOWROWS)), 0, SHADOWROWS - 1),
-        tx2 = clamp(int(floor((y2 + 1)/2 * SHADOWCOLUMNS)), 0, SHADOWCOLUMNS - 1),
-        ty2 = clamp(int(floor((x2 + 1)/2 * SHADOWROWS)), 0, SHADOWROWS - 1);
+    int tx1 = CLAMP(int(floor((y1 + 1)/2 * SHADOWCOLUMNS)), 0, SHADOWCOLUMNS - 1),
+        ty1 = CLAMP(int(floor((x1 + 1)/2 * SHADOWROWS)), 0, SHADOWROWS - 1),
+        tx2 = CLAMP(int(floor((y2 + 1)/2 * SHADOWCOLUMNS)), 0, SHADOWCOLUMNS - 1),
+        ty2 = CLAMP(int(floor((x2 + 1)/2 * SHADOWROWS)), 0, SHADOWROWS - 1);
 
     uint mask = (SHADOWCOLUMNMASK>>(SHADOWCOLUMNS - (tx2+1))) & (SHADOWCOLUMNMASK<<tx1);
     for(int y = ty1; y <= ty2; y++) shadowtiles[y] |= mask;
@@ -251,10 +251,10 @@ bool addshadowbox(const vec &bbmin, const vec &bbmax, const vec &extrude, const 
 
 static void rendershadowtiles()
 {
-    shadowx1 = clamp(shadowx1, -1.0f, 1.0f);
-    shadowy1 = clamp(shadowy1, -1.0f, 1.0f);
-    shadowx2 = clamp(shadowx2, -1.0f, 1.0f);
-    shadowy2 = clamp(shadowy2, -1.0f, 1.0f);
+    shadowx1 = CLAMP(shadowx1, -1.0f, 1.0f);
+    shadowy1 = CLAMP(shadowy1, -1.0f, 1.0f);
+    shadowx2 = CLAMP(shadowx2, -1.0f, 1.0f);
+    shadowy2 = CLAMP(shadowy2, -1.0f, 1.0f);
 
     if(shadowx1 >= shadowx2 || shadowy1 >= shadowy2) return;
 

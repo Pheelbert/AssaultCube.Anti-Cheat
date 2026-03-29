@@ -569,7 +569,7 @@ struct mitemslider : mitem
         char *v = executeret(p);
         if(v)
         {
-            value = clamp(int(ATOI(v)), min_, max_);
+            value = CLAMP(int(ATOI(v)), min_, max_);
             delete[] v;
         }
         displaycurvalue();
@@ -1004,7 +1004,7 @@ COMMAND(menuitemradio, "siisss");
 void menuitemcheckbox(char *text, char *value, char *action, int *pos)
 {
     if(!lastmenu) return;
-    lastmenu->items.add(new mitemcheckbox(lastmenu, newstring(text), newstring(value), action[0] ? newstring(action) : NULL, clamp(*pos, 0, 100), NULL));
+    lastmenu->items.add(new mitemcheckbox(lastmenu, newstring(text), newstring(value), action[0] ? newstring(action) : NULL, CLAMP(*pos, 0, 100), NULL));
 }
 COMMAND(menuitemcheckbox, "sssi");
 
@@ -1037,8 +1037,8 @@ void menumdl(char *menu, char *mdl, char *anim, int *rotspeed, int *scale)
     if(!*mdl) return;
     m->mdl = newstring(mdl);
     m->anim = findanim(anim)|ANIM_LOOP;
-    m->rotspeed = clamp(*rotspeed, 0, 100);
-    m->scale = clamp(*scale, 0, 100);
+    m->rotspeed = CLAMP(*rotspeed, 0, 100);
+    m->scale = CLAMP(*scale, 0, 100);
 }
 COMMAND(menumdl, "sssii");
 
@@ -1121,7 +1121,7 @@ void menusay(const char *text)
 // move menu selection forward or backward and skip empty items that are not selectable
 int movemenuselection(int currentmenusel, int direction)
 {
-    direction = clamp(direction, -1, 1);
+    direction = CLAMP(direction, -1, 1);
     int newmenusel = currentmenusel;
     bool selectable = false;
     for(int i = 0; i < curmenu->items.length(); i++)
@@ -1493,8 +1493,8 @@ void gmenu::render()
     int h = (mdisp+hitems+2)*step;
     int y = (2*VIRTH-h)/2;
     int x = hotkeys ? (2*VIRTW-w)/6 : (2*VIRTW-w)/2;
-    x = clamp(x + (VIRTW * xoffs) / 100, 3 * FONTH, 2 * VIRTW - w - 3 * FONTH);
-    y = clamp(y + (VIRTH * yoffs) / 100, 3 * FONTH, 2 * VIRTH - h - 3 * FONTH);
+    x = CLAMP(x + (VIRTW * xoffs) / 100, 3 * FONTH, 2 * VIRTW - w - 3 * FONTH);
+    y = CLAMP(y + (VIRTH * yoffs) / 100, 3 * FONTH, 2 * VIRTH - h - 3 * FONTH);
 
     if(!hotkeys) renderbg(x - FONTH*3/2, y - FONTH, x + w + FONTH*3/2, y + h + FONTH, true);
     if(pages)

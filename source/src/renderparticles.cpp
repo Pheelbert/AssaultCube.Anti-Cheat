@@ -600,7 +600,7 @@ void particle_trail(int type, int fade, const vec &s, const vec &e)
 {
     vec v;
     float d = e.dist(s, v);
-    int steps = clamp(int(d*2), 1, maxtrail);
+    int steps = CLAMP(int(d*2), 1, maxtrail);
     v.div(steps);
     vec p = s;
     loopi(steps)

@@ -92,7 +92,7 @@ VERTW(vertw, {}, {})
 VERTWC(vertwc, {
     varray::defattrib(varray::ATTRIB_COLOR, 4, GL_UNSIGNED_BYTE);
 }, {
-    varray::attrib<uchar>(hdr.watercolor[0], hdr.watercolor[1], hdr.watercolor[2], clamp(int(hdr.watercolor[3] + fabs(s)*0x18), 0, 255));
+    varray::attrib<uchar>(hdr.watercolor[0], hdr.watercolor[1], hdr.watercolor[2], CLAMP(int(hdr.watercolor[3] + fabs(s)*0x18), 0, 255));
 })
 VERTWT(vertwt, {
     varray::defattrib(varray::ATTRIB_TEXCOORD0, 3, GL_FLOAT);
