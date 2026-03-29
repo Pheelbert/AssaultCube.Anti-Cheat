@@ -2,6 +2,7 @@
 // runs dedicated or as client coroutine
 
 #include "cube.h"
+#include "anticheat/ac_telemetry_types.h"
 
 #ifdef STANDALONE
 #define DEBUGCOND (true)
@@ -3389,6 +3390,61 @@ void process(ENetPacket *packet, int sender, int chan)
                 else
                 {
                     sendservmsg("Correct hash!", sender);
+                }
+                break;
+            }
+
+            case SV_ANTICHEAT_TELEMETRY:
+            {
+                int telemetryType = getint(p);
+                int dataLength = getint(p);
+
+                // Validate data length
+                if (dataLength < 0 || dataLength > AC_MAX_TELEMETRY_DATA || p.remaining() < dataLength)
+                {
+                    mlog(ACLOG_WARNING, "[%s] %s sent invalid anticheat telemetry (type=%d, len=%d)", cl->hostname, cl->name, telemetryType, dataLength);
+                    disconnect_client(cl->clientnum, DISC_AUTOKICK);
+                    break;
+                }
+
+                uchar rawData[AC_MAX_TELEMETRY_DATA];
+                p.get(rawData, dataLength);
+
+                switch (telemetryType)
+                {
+                    case AC_TELEMETRY_WINDOWS_VERSION:
+                    {
+                        if (dataLength >= (int)sizeof(AcWindowsVersionData))
+                        {
+                            const AcWindowsVersionData *winver = (const AcWindowsVersionData *)&rawData[0];
+                            cl->hasKernelAC = true;
+                            cl->windowsMajor = (int)winver->MajorVersion;
+                            cl->windowsMinor = (int)winver->MinorVersion;
+                            cl->windowsBuild = (int)winver->BuildNumber;
+                            mlog(ACLOG_INFO, "[%s] %s kernel AC: Windows %d.%d.%d",
+                                 cl->hostname, cl->name,
+                                 cl->windowsMajor, cl->windowsMinor, cl->windowsBuild);
+                        }
+                        break;
+                    }
+                    case AC_TELEMETRY_HEARTBEAT:
+                    {
+                        if (dataLength >= (int)sizeof(AcHeartbeatData))
+                        {
+                            const AcHeartbeatData *hb = (const AcHeartbeatData *)&rawData[0];
+                            cl->hasKernelAC = true;
+                            mlog(ACLOG_VERBOSE, "[%s] %s kernel AC heartbeat: driver v%u, uptime %us, scans %u",
+                                 cl->hostname, cl->name,
+                                 hb->DriverVersion,
+                                 hb->UptimeSeconds,
+                                 hb->ScanCount);
+                        }
+                        break;
+                    }
+                    default:
+                        mlog(ACLOG_VERBOSE, "[%s] %s sent unknown telemetry type %d (%d bytes)",
+                             cl->hostname, cl->name, telemetryType, dataLength);
+                        break;
                 }
                 break;
             }

@@ -7,6 +7,8 @@ void cleanup(char *msg)         // single program exit point;
     if(clientlogfile) clientlogfile->fflush();
     if(!msg)
     {
+        extern void shutdownanticheat();
+        shutdownanticheat();
         cleanupclient();
         audiomgr.soundcleanup();
         cleanupserver();
@@ -1355,6 +1357,9 @@ int main(int argc, char **argv)
     if(enet_initialize()<0) fatal("Unable to initialise network module");
 
     if (!dedicated) initclient();
+
+    extern void initanticheat();
+    if (!dedicated) initanticheat();
 
     initserver(dedicated);  // never returns if dedicated
 

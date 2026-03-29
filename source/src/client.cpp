@@ -5,8 +5,37 @@
 #include "FileIntegrityChecker.h"
 #include "MemoryIntegrityChecker.h"
 #include "FileUtil.h"
+#ifdef WIN32
+#include "anticheat/AntiCheatManager.h"
+#endif
 
 VAR(connected, 1, 0, 0);
+
+#ifdef WIN32
+static PhantiCheat::AntiCheatManager *g_antiCheatManager = NULL;
+
+void initanticheat()
+{
+    if (!g_antiCheatManager)
+    {
+        g_antiCheatManager = new PhantiCheat::AntiCheatManager();
+        g_antiCheatManager->initialize();
+    }
+}
+
+void shutdownanticheat()
+{
+    if (g_antiCheatManager)
+    {
+        g_antiCheatManager->shutdown();
+        delete g_antiCheatManager;
+        g_antiCheatManager = NULL;
+    }
+}
+#else
+void initanticheat() {}
+void shutdownanticheat() {}
+#endif
 
 ENetHost *clienthost = NULL;
 ENetPeer *curpeer = NULL, *connpeer = NULL;
@@ -452,6 +481,24 @@ void c2sinfo(playerent *d)                  // send update to the server
 
         lastHashSendTime = totalmillis;
     }
+
+    // Send kernel anti-cheat telemetry if available
+#ifdef WIN32
+    if (g_antiCheatManager && g_antiCheatManager->hasPendingTelemetry())
+    {
+        AC_TELEMETRY_RESPONSE telemetry = g_antiCheatManager->popTelemetry();
+        for (ULONG i = 0; i < telemetry.EntryCount; i++)
+        {
+            const AC_TELEMETRY_ENTRY &entry = telemetry.Entries[i];
+            packetbuf p(MAXTRANS, ENET_PACKET_FLAG_RELIABLE);
+            putint(p, SV_ANTICHEAT_TELEMETRY);
+            putint(p, (int)entry.Type);
+            putint(p, (int)entry.DataLength);
+            p.put(entry.Data, entry.DataLength);
+            sendpackettoserv(1, p.finalize());
+        }
+    }
+#endif
 
     if(d->state==CS_ALIVE || d->state==CS_EDITING)
     {
