@@ -273,6 +273,13 @@ tr:hover td { background: var(--surface2); }
     </div>
 
     <div class="section">
+        <div class="section-header">Player Stats (Session)</div>
+        <div id="sessionStatsContent">
+            <div class="empty-state">No session stats available</div>
+        </div>
+    </div>
+
+    <div class="section">
         <div class="section-header">Anti-Cheat Telemetry</div>
         <div id="acContent">
             <div class="empty-state">No anti-cheat data available</div>
@@ -381,6 +388,41 @@ function renderPlayers(players) {
     el.innerHTML = html;
 }
 
+function renderSessionStats(players) {
+    const el = document.getElementById('sessionStatsContent');
+    if (!players || players.length === 0) {
+        el.innerHTML = '<div class="empty-state">No session stats available</div>';
+        return;
+    }
+    const sorted = [...players].sort((a, b) => (b.session_frags || 0) - (a.session_frags || 0));
+    let html = `<table>
+        <thead><tr>
+            <th>Name</th>
+            <th>Kills</th><th>Deaths</th><th>K/D</th>
+            <th>Shots Fired</th><th>Shots Hit</th><th>Shots Missed</th><th>Hit %</th>
+        </tr></thead><tbody>`;
+    for (const p of sorted) {
+        const kills = p.session_frags || 0;
+        const deaths = p.session_deaths || 0;
+        const shots = p.session_shotcount || 0;
+        const hits = p.session_hits || 0;
+        const missed = shots - hits;
+        const hitPct = shots > 0 ? (hits / shots * 100).toFixed(1) : '-';
+        html += `<tr>
+            <td><strong>${escapeHtml(p.name)}</strong></td>
+            <td>${kills}</td>
+            <td>${deaths}</td>
+            <td>${kdRatio(kills, deaths)}</td>
+            <td>${shots}</td>
+            <td>${hits}</td>
+            <td>${missed}</td>
+            <td><span class="accuracy">${hitPct}${hitPct !== '-' ? '%' : ''}</span></td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+}
+
 function renderAntiCheat(players) {
     const el = document.getElementById('acContent');
     if (!players || players.length === 0) {
@@ -443,6 +485,7 @@ async function update() {
         document.getElementById('cardMM').textContent = s.mastermode || '-';
 
         renderPlayers(data.players);
+        renderSessionStats(data.players);
         renderAntiCheat(data.players);
 
         document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();

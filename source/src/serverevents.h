@@ -54,6 +54,7 @@ void processevent(client *c, shotevent &e)
         int(e.to[0]*DMF), int(e.to[1]*DMF), int(e.to[2]*DMF),
         c->clientnum);
     gs.shotdamage += guns[e.gun].damage*(e.gun==GUN_SHOTGUN ? SGMAXDMGLOC : 1); // 2011jan17:ft: so accuracy stays correct, since SNIPER:headshot also "exceeds expectations" we use SGMAXDMGLOC instead of SGMAXDMGABS!
+    c->session_shotcount++;
     switch(e.gun)
     {
         case GUN_GRENADE: gs.grenades.add(e.id); break;
@@ -100,6 +101,7 @@ void processevent(client *c, shotevent &e)
                 totalrays += rays;
 
                 if(totalrays>maxrays) continue;
+                c->session_hits++;
                 serverdamage(target, c, damage, e.gun, gib, h.dir);
             }
             break;

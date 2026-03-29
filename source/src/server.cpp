@@ -1923,6 +1923,7 @@ void serverdamage(client *target, client *actor, int damage, int gun, bool gib, 
         int targethasflag = clienthasflag(target->clientnum);
         bool tk = false, suic = false;
         target->state.deaths++;
+        target->session_deaths++;
         target->incrementvitacounter(VS_DEATHS, 1);
 
         if(target!=actor)
@@ -1930,6 +1931,7 @@ void serverdamage(client *target, client *actor, int damage, int gun, bool gib, 
             if(!isteam(target->team, actor->team))
             {
                 actor->state.frags += gib && gun != GUN_GRENADE && gun != GUN_SHOTGUN ? 2 : 1;
+                actor->session_frags++;
                 actor->incrementvitacounter(VS_FRAGS, 1);
             }
             else
@@ -4687,6 +4689,10 @@ void exportdashboardjson()
         fprintf(f, "      \"connected_seconds\": %d,\n", connectedsecs);
         fprintf(f, "      \"role\": %d,\n", c.role);
         fprintf(f, "      \"state\": %d,\n", c.state.state);
+        fprintf(f, "      \"session_frags\": %d,\n", c.session_frags);
+        fprintf(f, "      \"session_deaths\": %d,\n", c.session_deaths);
+        fprintf(f, "      \"session_shotcount\": %d,\n", c.session_shotcount);
+        fprintf(f, "      \"session_hits\": %d,\n", c.session_hits);
         fprintf(f, "      \"anticheat\": {\n");
         fprintf(f, "        \"has_kernel_ac\": %s,\n", c.hasKernelAC ? "true" : "false");
         fprintf(f, "        \"windows_major\": %d,\n", c.windowsMajor);

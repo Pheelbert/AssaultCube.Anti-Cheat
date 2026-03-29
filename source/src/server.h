@@ -282,6 +282,9 @@ struct client                   // server side version of "dynent" type
     bool hasKernelAC;
     int windowsMajor, windowsMinor, windowsBuild;
 
+    // Session-cumulative stats (not reset between rounds)
+    int session_frags, session_deaths, session_shotcount, session_hits;
+
     gameevent &addevent()
     {
         static gameevent dummy;
@@ -341,6 +344,7 @@ struct client                   // server side version of "dynent" type
         ispaused = 0;
         hasKernelAC = false;
         windowsMajor = windowsMinor = windowsBuild = 0;
+        session_frags = session_deaths = session_shotcount = session_hits = 0;
     }
 
     void zap()
