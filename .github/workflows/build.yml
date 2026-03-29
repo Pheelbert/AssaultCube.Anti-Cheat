@@ -79,6 +79,7 @@ jobs:
           msbuild source\src\anticheat\driver\phanticheat.vcxproj
           /p:Configuration=Release
           /p:Platform=x64
+          /p:SignMode=Off
           /m
 
       - name: Verify driver binary

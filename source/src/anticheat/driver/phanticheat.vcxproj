@@ -115,15 +115,15 @@
   </ItemGroup>
 
   <!-- ================================================================== -->
-  <!-- Import WDK targets                                                  -->
-  <!-- ================================================================== -->
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-
-  <!-- ================================================================== -->
-  <!-- Driver signing (must come after targets import so WDK picks it up)  -->
+  <!-- Driver signing                                                      -->
   <!-- ================================================================== -->
   <PropertyGroup>
     <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
   </PropertyGroup>
+
+  <!-- ================================================================== -->
+  <!-- Import WDK targets                                                  -->
+  <!-- ================================================================== -->
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 
 </Project>
