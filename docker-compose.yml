@@ -16,8 +16,10 @@ services:
       - "8080:8080"
     volumes:
       - dashboard-data:/data:ro
+      - ./logs:/logs:ro
     environment:
       - AC_STATUS_FILE=/data/dashboard_status.json
+      - AC_LOGS_DIR=/logs
     depends_on:
       - acserver
     restart: unless-stopped

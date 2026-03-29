@@ -11,15 +11,18 @@ Usage:
 """
 
 import argparse
+import glob as globmod
 import json
 import os
+import re
 import time
 import threading
-from flask import Flask, jsonify, Response
+from flask import Flask, jsonify, request, Response
 
 app = Flask(__name__)
 
 STATUS_FILE = os.environ.get("AC_STATUS_FILE", "dashboard_status.json")
+LOGS_DIR = os.environ.get("AC_LOGS_DIR", "/logs")
 
 # In-memory state for tracking player history and telemetry
 player_history = {}  # keyed by (name, ip-hash via cn) -> player data + status
@@ -166,6 +169,92 @@ def api_status():
             "telemetry": telemetry_log[-500:],  # last 500 events
             "has_data": _last_server_data is not None,
         })
+
+
+@app.route("/api/logs")
+def api_logs_list():
+    """List available log files, newest first."""
+    try:
+        files = globmod.glob(os.path.join(LOGS_DIR, "*.txt"))
+        result = []
+        for f in files:
+            stat = os.stat(f)
+            result.append({
+                "name": os.path.basename(f),
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+            })
+        result.sort(key=lambda x: x["modified"], reverse=True)
+        return jsonify({"files": result})
+    except Exception as e:
+        return jsonify({"files": [], "error": str(e)})
+
+
+@app.route("/api/logs/<filename>")
+def api_logs_read(filename):
+    """Read a log file with optional filtering. Query params:
+    - tail: number of lines from the end (default 500)
+    - search: text filter (case-insensitive)
+    - level: minimum log level filter (DEBUG, VERBOSE, INFO, WARNING, ERROR)
+    """
+    # Sanitize filename to prevent path traversal
+    safe_name = os.path.basename(filename)
+    if safe_name != filename or ".." in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+
+    filepath = os.path.join(LOGS_DIR, safe_name)
+    if not os.path.isfile(filepath):
+        return jsonify({"error": "File not found"}), 404
+
+    tail = request.args.get("tail", "500", type=str)
+    search = request.args.get("search", "", type=str).strip()
+    level_filter = request.args.get("level", "", type=str).strip().upper()
+
+    level_order = ["DEBUG", "VERBOSE", "INFO", "WARNING", "ERROR"]
+    min_level_idx = 0
+    if level_filter in level_order:
+        min_level_idx = level_order.index(level_filter)
+
+    level_pattern = re.compile(r"\[(DEBUG|VERBOSE|INFO|WARNING|ERROR)\]")
+
+    try:
+        with open(filepath, "r", errors="replace") as f:
+            all_lines = f.readlines()
+
+        # Apply level filter
+        if min_level_idx > 0:
+            filtered = []
+            for line in all_lines:
+                m = level_pattern.search(line)
+                if m:
+                    line_level = m.group(1)
+                    if level_order.index(line_level) >= min_level_idx:
+                        filtered.append(line)
+                else:
+                    # Lines without a level tag pass through (e.g. continuation lines)
+                    filtered.append(line)
+            all_lines = filtered
+
+        # Apply search filter
+        if search:
+            search_lower = search.lower()
+            all_lines = [l for l in all_lines if search_lower in l.lower()]
+
+        # Apply tail
+        try:
+            tail_n = int(tail)
+            if tail_n > 0:
+                all_lines = all_lines[-tail_n:]
+        except ValueError:
+            pass
+
+        return jsonify({
+            "filename": safe_name,
+            "lines": [l.rstrip("\n\r") for l in all_lines],
+            "total_lines": len(all_lines),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 DASHBOARD_HTML = r"""<!DOCTYPE html>
@@ -461,6 +550,111 @@ tr:last-child td { border-bottom: none; }
     .player-row td:first-child { padding-left: 26px; }
 }
 
+/* Tabs */
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+}
+.tab-btn {
+    padding: 10px 24px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Logs viewer */
+.logs-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.logs-toolbar select,
+.logs-toolbar input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    outline: none;
+}
+.logs-toolbar select:focus,
+.logs-toolbar input:focus { border-color: var(--accent); }
+.logs-toolbar input { flex: 1; min-width: 150px; }
+.logs-toolbar label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+.logs-toolbar .toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.log-output {
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    padding: 16px 20px;
+    max-height: 600px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    background: var(--bg);
+}
+.log-output .log-line { padding: 1px 0; }
+.log-output .log-line:hover { background: var(--surface2); }
+.log-line-debug { color: var(--text-dim); }
+.log-line-verbose { color: var(--text-dim); }
+.log-line-info { color: var(--text); }
+.log-line-warning { color: var(--orange); }
+.log-line-error { color: var(--red); }
+.log-search-highlight { background: rgba(247, 228, 79, 0.3); border-radius: 2px; }
+.log-line-number {
+    display: inline-block;
+    width: 50px;
+    color: var(--text-dim);
+    opacity: 0.4;
+    user-select: none;
+    text-align: right;
+    margin-right: 12px;
+}
+.logs-status {
+    padding: 8px 20px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+}
+.auto-refresh-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+.auto-refresh-toggle input { cursor: pointer; }
+
 .error-banner {
     background: rgba(247, 79, 79, 0.1);
     border: 1px solid rgba(247, 79, 79, 0.3);
@@ -493,6 +687,12 @@ tr:last-child td { border-bottom: none; }
         Waiting for server data...
     </div>
 
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+        <button class="tab-btn" onclick="switchTab('logs')">Server Logs</button>
+    </div>
+
+    <div id="tab-dashboard" class="tab-content active">
     <div class="cards" id="cards">
         <div class="card">
             <div class="card-label">Players Online</div>
@@ -534,6 +734,55 @@ tr:last-child td { border-bottom: none; }
             <div class="empty-state">No telemetry events recorded</div>
         </div>
     </div>
+    </div><!-- end tab-dashboard -->
+
+    <div id="tab-logs" class="tab-content">
+    <div class="section">
+        <div class="section-header">Server Logs</div>
+        <div class="logs-toolbar">
+            <div class="toolbar-group">
+                <label>File:</label>
+                <select id="logFileSelect" onchange="loadLogFile()">
+                    <option value="">Loading...</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <label>Level:</label>
+                <select id="logLevelSelect" onchange="loadLogFile()">
+                    <option value="">All</option>
+                    <option value="DEBUG">DEBUG+</option>
+                    <option value="VERBOSE">VERBOSE+</option>
+                    <option value="INFO" selected>INFO+</option>
+                    <option value="WARNING">WARNING+</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            <div class="toolbar-group">
+                <label>Lines:</label>
+                <select id="logTailSelect" onchange="loadLogFile()">
+                    <option value="200">200</option>
+                    <option value="500" selected>500</option>
+                    <option value="1000">1000</option>
+                    <option value="5000">5000</option>
+                    <option value="0">All</option>
+                </select>
+            </div>
+            <input type="text" id="logSearchInput" placeholder="Search logs..." oninput="onLogSearchDebounced()">
+            <label class="auto-refresh-toggle">
+                <input type="checkbox" id="logAutoRefresh" checked onchange="toggleLogAutoRefresh()">
+                Auto-refresh
+            </label>
+        </div>
+        <div class="log-output" id="logOutput">
+            <div class="empty-state">Select a log file to view</div>
+        </div>
+        <div class="logs-status">
+            <span id="logStatus">No log loaded</span>
+            <span id="logFileInfo"></span>
+        </div>
+    </div>
+    </div><!-- end tab-logs -->
+
 </div>
 
 <script>
@@ -890,6 +1139,150 @@ async function update() {
 // Refresh every 2 seconds
 update();
 setInterval(update, 2000);
+
+// --- Tab switching ---
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.querySelector('.tab-btn[onclick*="' + tab + '"]').classList.add('active');
+    if (tab === 'logs' && !logsInitialized) {
+        logsInitialized = true;
+        loadLogFileList();
+    }
+}
+
+// --- Logs viewer ---
+let logsInitialized = false;
+let logAutoRefreshTimer = null;
+let logSearchTimer = null;
+let currentLogLines = [];
+
+function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+async function loadLogFileList() {
+    try {
+        const res = await fetch('/api/logs');
+        const data = await res.json();
+        const sel = document.getElementById('logFileSelect');
+        sel.innerHTML = '';
+        if (data.files.length === 0) {
+            sel.innerHTML = '<option value="">No log files found</option>';
+            return;
+        }
+        for (const f of data.files) {
+            const opt = document.createElement('option');
+            opt.value = f.name;
+            const date = new Date(f.modified * 1000).toLocaleDateString();
+            opt.textContent = f.name + ' (' + formatFileSize(f.size) + ', ' + date + ')';
+            sel.appendChild(opt);
+        }
+        // Auto-load the first (newest) file
+        loadLogFile();
+    } catch (e) {
+        document.getElementById('logOutput').innerHTML =
+            '<div class="empty-state">Failed to load log files: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function loadLogFile() {
+    const filename = document.getElementById('logFileSelect').value;
+    if (!filename) return;
+
+    const level = document.getElementById('logLevelSelect').value;
+    const tail = document.getElementById('logTailSelect').value;
+    const search = document.getElementById('logSearchInput').value;
+
+    const params = new URLSearchParams();
+    if (tail) params.set('tail', tail);
+    if (search) params.set('search', search);
+    if (level) params.set('level', level);
+
+    try {
+        const res = await fetch('/api/logs/' + encodeURIComponent(filename) + '?' + params);
+        const data = await res.json();
+        if (data.error) {
+            document.getElementById('logOutput').innerHTML =
+                '<div class="empty-state">Error: ' + escapeHtml(data.error) + '</div>';
+            return;
+        }
+        currentLogLines = data.lines;
+        renderLogLines(data.lines, search);
+        document.getElementById('logStatus').textContent =
+            'Showing ' + data.lines.length + ' lines';
+        document.getElementById('logFileInfo').textContent =
+            'File: ' + data.filename;
+    } catch (e) {
+        document.getElementById('logOutput').innerHTML =
+            '<div class="empty-state">Failed to load log: ' + escapeHtml(e.message) + '</div>';
+    }
+
+    // Manage auto-refresh
+    setupLogAutoRefresh();
+}
+
+function renderLogLines(lines, search) {
+    const output = document.getElementById('logOutput');
+    if (lines.length === 0) {
+        output.innerHTML = '<div class="empty-state">No log lines match the current filters</div>';
+        return;
+    }
+
+    const searchLower = (search || '').toLowerCase();
+    let html = '';
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const escaped = escapeHtml(line);
+
+        // Determine line level class
+        let cls = '';
+        if (line.includes('[DEBUG]')) cls = 'log-line-debug';
+        else if (line.includes('[VERBOSE]')) cls = 'log-line-verbose';
+        else if (line.includes('[WARNING]')) cls = 'log-line-warning';
+        else if (line.includes('[ERROR]')) cls = 'log-line-error';
+
+        // Highlight search terms
+        let display = escaped;
+        if (searchLower) {
+            const regex = new RegExp('(' + escapeRegex(escapeHtml(search)) + ')', 'gi');
+            display = display.replace(regex, '<span class="log-search-highlight">$1</span>');
+        }
+
+        html += '<div class="log-line ' + cls + '">';
+        html += '<span class="log-line-number">' + (i + 1) + '</span>';
+        html += display;
+        html += '</div>';
+    }
+    output.innerHTML = html;
+    // Auto-scroll to bottom
+    output.scrollTop = output.scrollHeight;
+}
+
+function escapeRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function onLogSearchDebounced() {
+    clearTimeout(logSearchTimer);
+    logSearchTimer = setTimeout(loadLogFile, 300);
+}
+
+function setupLogAutoRefresh() {
+    clearInterval(logAutoRefreshTimer);
+    logAutoRefreshTimer = null;
+    if (document.getElementById('logAutoRefresh').checked) {
+        logAutoRefreshTimer = setInterval(loadLogFile, 5000);
+    }
+}
+
+function toggleLogAutoRefresh() {
+    setupLogAutoRefresh();
+}
+
 </script>
 </body>
 </html>"""
