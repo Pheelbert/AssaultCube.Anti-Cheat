@@ -278,6 +278,10 @@ struct client                   // server side version of "dynent" type
     int nvotes;
     int ffire, wn, f, t, yaw, pitch;
 
+    // Kernel anti-cheat telemetry
+    bool hasKernelAC;
+    int windowsMajor, windowsMinor, windowsBuild;
+
     gameevent &addevent()
     {
         static gameevent dummy;
@@ -335,6 +339,8 @@ struct client                   // server side version of "dynent" type
         freshgame = false;         // don't spawn into running games
         mute = spam = lastvc = badspeech = badmillis = nvotes = 0;
         ispaused = 0;
+        hasKernelAC = false;
+        windowsMajor = windowsMinor = windowsBuild = 0;
     }
 
     void zap()
@@ -442,7 +448,10 @@ const char *messagenames[SV_NUM] =
     "SV_CLIENT",
     "SV_EXTENSION",
     "SV_MAPIDENT", "SV_DEMOCHECKSUM", "SV_DEMOSIGNATURE",
-    "SV_PAUSEMODE"
+    "SV_PAUSEMODE",
+    "SV_GETVITA", "SV_VITADATA",
+    "SV_HASHVERIFY",
+    "SV_ANTICHEAT_TELEMETRY"
 };
 
 const char *entnames[] =
