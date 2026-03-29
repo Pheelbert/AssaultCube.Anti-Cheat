@@ -4612,6 +4612,97 @@ void linequalitystats(int elapsed)
 
 SERVPARLIST(mandatory_auth, 0, 1, 0, endis, "sEnforce IDs for all clients even on unlisted server/LAN game");
 
+// Dashboard JSON export - writes server state to a file for the web dashboard
+static void json_writestr(FILE *out, const char *s)
+{
+    fputc('"', out);
+    for(; *s; s++)
+    {
+        if(*s == '"' || *s == '\\') { fputc('\\', out); fputc(*s, out); }
+        else if((unsigned char)*s < 0x20) { fprintf(out, "\\u%04x", (unsigned char)*s); }
+        else fputc(*s, out);
+    }
+    fputc('"', out);
+}
+
+void exportdashboardjson()
+{
+    static int lastexport = 0;
+    if(servmillis - lastexport < 2000) return; // export every 2 seconds
+    lastexport = servmillis;
+
+    // Write to data/ subdirectory (shared volume in Docker), fall back to CWD
+    static const char *jsonpath = NULL, *tmppath = NULL;
+    if(!jsonpath)
+    {
+        FILE *test = fopen("data/.dashtest", "w");
+        if(test) { fclose(test); remove("data/.dashtest"); jsonpath = "data/dashboard_status.json"; tmppath = "data/dashboard_status.json.tmp"; }
+        else { jsonpath = "dashboard_status.json"; tmppath = "dashboard_status.json.tmp"; }
+    }
+    FILE *f = fopen(tmppath, "w");
+    if(!f) return;
+
+    int uptimesecs = servmillis / 1000;
+    int nonlocal = numnonlocalclients();
+
+    fprintf(f, "{\n");
+    fprintf(f, "  \"server\": {\n");
+    fprintf(f, "    \"uptime_seconds\": %d,\n", uptimesecs);
+    fprintf(f, "    \"map\": "); json_writestr(f, sg->smapname); fprintf(f, ",\n");
+    fprintf(f, "    \"mode\": "); json_writestr(f, acronymmodestr(sg->smode)); fprintf(f, ",\n");
+    fprintf(f, "    \"mode_full\": "); json_writestr(f, fullmodestr(sg->smode)); fprintf(f, ",\n");
+    fprintf(f, "    \"description\": "); json_writestr(f, sg->servdesc_current); fprintf(f, ",\n");
+    fprintf(f, "    \"players_online\": %d,\n", nonlocal);
+    fprintf(f, "    \"max_players\": %d,\n", scl.maxclients);
+    fprintf(f, "    \"mastermode\": "); json_writestr(f, mmfullname(sg->mastermode)); fprintf(f, ",\n");
+    fprintf(f, "    \"game_millis\": %d,\n", sg->gamemillis);
+    fprintf(f, "    \"game_limit\": %d,\n", sg->gamelimit);
+    fprintf(f, "    \"intermission\": %s\n", sg->interm ? "true" : "false");
+    fprintf(f, "  },\n");
+
+    fprintf(f, "  \"players\": [\n");
+    bool first = true;
+    loopv(clients)
+    {
+        client &c = *clients[i];
+        if(c.type != ST_TCPIP || !c.isauthed) continue;
+
+        if(!first) fprintf(f, ",\n");
+        first = false;
+
+        int connectedsecs = (servmillis - c.connectmillis) / 1000;
+
+        fprintf(f, "    {\n");
+        fprintf(f, "      \"cn\": %d,\n", c.clientnum);
+        fprintf(f, "      \"name\": "); json_writestr(f, c.name); fprintf(f, ",\n");
+        fprintf(f, "      \"team\": "); json_writestr(f, team_string(c.team)); fprintf(f, ",\n");
+        fprintf(f, "      \"frags\": %d,\n", c.state.frags);
+        fprintf(f, "      \"deaths\": %d,\n", c.state.deaths);
+        fprintf(f, "      \"teamkills\": %d,\n", c.state.teamkills);
+        fprintf(f, "      \"flagscore\": %d,\n", c.state.flagscore);
+        fprintf(f, "      \"damage\": %d,\n", c.state.damage);
+        fprintf(f, "      \"shotdamage\": %d,\n", c.state.shotdamage);
+        fprintf(f, "      \"ping\": %d,\n", c.ping);
+        fprintf(f, "      \"country\": "); json_writestr(f, c.country); fprintf(f, ",\n");
+        fprintf(f, "      \"connected_seconds\": %d,\n", connectedsecs);
+        fprintf(f, "      \"role\": %d,\n", c.role);
+        fprintf(f, "      \"state\": %d,\n", c.state.state);
+        fprintf(f, "      \"anticheat\": {\n");
+        fprintf(f, "        \"has_kernel_ac\": %s,\n", c.hasKernelAC ? "true" : "false");
+        fprintf(f, "        \"windows_major\": %d,\n", c.windowsMajor);
+        fprintf(f, "        \"windows_minor\": %d,\n", c.windowsMinor);
+        fprintf(f, "        \"windows_build\": %d\n", c.windowsBuild);
+        fprintf(f, "      }\n");
+        fprintf(f, "    }");
+    }
+    fprintf(f, "\n  ]\n");
+    fprintf(f, "}\n");
+    fclose(f);
+
+    // atomic rename to avoid partial reads
+    rename(tmppath, jsonpath);
+}
+
 void serverslice(uint timeout)   // main server update, called from cube main loop in sp, or dedicated server loop
 {
     static int msend = 0, mrec = 0, csend = 0, crec = 0, mnum = 0, cnum = 0;
@@ -4688,6 +4779,8 @@ void serverslice(uint timeout)   // main server update, called from cube main lo
     checkdemotransmissions();
 
     if(!isdedicated) return;     // below is network only
+
+    exportdashboardjson();
 
     poll_serverthreads(); // read config and map files in the background, process the results in the main thread
 

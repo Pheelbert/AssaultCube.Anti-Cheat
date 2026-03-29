@@ -30,7 +30,7 @@ COPY --from=builder /build/bin_unix/native_server bin_unix/native_server
 COPY config/ config/
 COPY packages/maps/ packages/maps/
 
-RUN mkdir -p logs && chown -R acserver:acserver /ac
+RUN mkdir -p logs data && chown -R acserver:acserver /ac
 
 USER acserver
 
