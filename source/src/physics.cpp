@@ -165,8 +165,8 @@ bool mmcollide(physent *d, float &hi, float &lo)           // collide with a map
                 float cz = float(S(e.x, e.y)->floor + float(e.attr1) / ENTSCALE10), ch = float(e.attr4) / ENTSCALE5;
                 if(e.attr6) switch(e.attr7 & 3)
                 { // incredibly ugly solution - but it only applies on the one tilted clip we stand on
-                    case 1: cz += (floor(0.5f + clamp(d->o.x - e.x + d->radius * (e.attr6 > 0 ? 1 : -1), -float(e.attr2) / ENTSCALE5, float(e.attr2) / ENTSCALE5))) * float(e.attr6) / (4 * ENTSCALE10); break; // tilt x
-                    case 2: cz += (floor(0.5f + clamp(d->o.y - e.y + d->radius * (e.attr6 > 0 ? 1 : -1), -float(e.attr3) / ENTSCALE5, float(e.attr3) / ENTSCALE5))) * float(e.attr6) / (4 * ENTSCALE10); break; // tilt y
+                    case 1: cz += (floor(0.5f + CLAMP(d->o.x - e.x + d->radius * (e.attr6 > 0 ? 1 : -1), -float(e.attr2) / ENTSCALE5, float(e.attr2) / ENTSCALE5))) * float(e.attr6) / (4 * ENTSCALE10); break; // tilt x
+                    case 2: cz += (floor(0.5f + CLAMP(d->o.y - e.y + d->radius * (e.attr6 > 0 ? 1 : -1), -float(e.attr3) / ENTSCALE5, float(e.attr3) / ENTSCALE5))) * float(e.attr6) / (4 * ENTSCALE10); break; // tilt y
                 }
                 const float dz = d->o.z - d->eyeheight;
                 if(dz < cz - 0.42) { if(cz<hi) hi = cz; }
@@ -722,11 +722,11 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
             }
             else
             {
-                p->movroll = clamp(p->movroll + pl->strafe * curtime / -30.0f, -p->maxroll, p->maxroll);
+                p->movroll = CLAMP(p->movroll + pl->strafe * curtime / -30.0f, -p->maxroll, p->maxroll);
             }
             p->effroll /= iir; // fade damage roll
             pl->roll = p->movroll + p->effroll;
-            if(pl != player1) pl->roll = clamp(pl->roll, (float)-maxrollremote, (float)maxrollremote);
+            if(pl != player1) pl->roll = CLAMP(pl->roll, (float)-maxrollremote, (float)maxrollremote);
         }
         // smooth pitch
         const float fric = 6.0f/curtime*20.0f;
@@ -783,7 +783,7 @@ void physicsframe()          // optimally schedule physics frames inside the gra
     else
     {
         extern int gamespeed;
-        physframetime = clamp((PHYSFRAMETIME*gamespeed)/100, 1, PHYSFRAMETIME);
+        physframetime = CLAMP((PHYSFRAMETIME*gamespeed)/100, 1, PHYSFRAMETIME);
         physsteps = (diff + physframetime - 1)/physframetime;
         lastphysframe += physsteps * physframetime;
         if(!multiplayer(NULL) && physsteps > 1000) physsteps = 1000;

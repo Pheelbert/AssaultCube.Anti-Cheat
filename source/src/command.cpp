@@ -210,13 +210,13 @@ char *svariable(const char *name, const char *cur, char **storage, void (*fun)()
 void setvar(const char *name, int i, bool dofunc)
 {
     GETVAR(id, ID_VAR, name);
-    *id->storage.i = clamp(i, id->minval, id->maxval);
+    *id->storage.i = CLAMP(i, id->minval, id->maxval);
     if(dofunc && id->fun) ((void (__cdecl *)())id->fun)();            // call trigger function if available
 }
 void setfvar(const char *name, float f, bool dofunc)
 {
     GETVAR(id, ID_FVAR, name);
-    *id->storage.f = clamp(f, id->minvalf, id->maxvalf);
+    *id->storage.f = CLAMP(f, id->minvalf, id->maxvalf);
     if(dofunc && id->fun) ((void (__cdecl *)())id->fun)();            // call trigger function if available
 }
 void setsvar(const char *name, const char *str, bool dofunc)
@@ -1262,8 +1262,8 @@ int find(char *s, const char *key)
 COMMANDF(findlist, "ss", (char *s, char *key) { intret(find(s, key)); });
 
 #ifndef STANDALONE
-COMMANDF(l0, "ii", (int *p, int *v) { defformatstring(f)("%%0%dd", clamp(*p, 0, 200)); defformatstring(r)(f, *v); result(r); });
-COMMANDF(h0, "ii", (int *p, int *v) { defformatstring(f)("%%0%dx", clamp(*p, 0, 200)); defformatstring(r)(f, *v); result(r); });
+COMMANDF(l0, "ii", (int *p, int *v) { defformatstring(f)("%%0%dd", CLAMP(*p, 0, 200)); defformatstring(r)(f, *v); result(r); });
+COMMANDF(h0, "ii", (int *p, int *v) { defformatstring(f)("%%0%dx", CLAMP(*p, 0, 200)); defformatstring(r)(f, *v); result(r); });
 COMMANDF(strlen, "s", (char *s) { intret(strlen(s)); });
 COMMANDF(strstr, "ss", (char *h, char *n) { char *r = strstr(h, n); intret(r ? r - h + 1 : 0); });
 
@@ -1364,8 +1364,8 @@ void modifyvar(const char *name, int arg, char op)
     }
     switch(id->type)
     {
-        case ID_VAR: *id->storage.i = clamp(val, id->minval, id->maxval); break;
-        case ID_FVAR: *id->storage.f = clamp((float)val, id->minvalf, id->maxvalf); break;
+        case ID_VAR: *id->storage.i = CLAMP(val, id->minval, id->maxval); break;
+        case ID_FVAR: *id->storage.f = CLAMP((float)val, id->minvalf, id->maxvalf); break;
         case ID_SVAR:  { string str; itoa(str, val); *id->storage.s = exchangestr(*id->storage.s, str); break; }
         case ID_ALIAS: { string str; itoa(str, val); alias(name, str); return; }
     }
@@ -1406,8 +1406,8 @@ void modifyfvar(const char *name, float arg, char op)
     }
     switch(id->type)
     {
-        case ID_VAR: *id->storage.i = clamp((int)val, id->minval, id->maxval); break;
-        case ID_FVAR: *id->storage.f = clamp(val, id->minvalf, id->maxvalf); break;
+        case ID_VAR: *id->storage.i = CLAMP((int)val, id->minval, id->maxval); break;
+        case ID_FVAR: *id->storage.f = CLAMP(val, id->minvalf, id->maxvalf); break;
         case ID_SVAR: *id->storage.s = exchangestr(*id->storage.s, floatstr(val)); break;
         case ID_ALIAS: alias(name, floatstr(val)); return;
     }

@@ -469,7 +469,7 @@ void passphrase2key(const char *pass, const uchar *salt, int saltlen, uchar *key
 {
     memset(key, 0, keylen);
     if(!*pass) return;                       // password "" ->
-    memusage = clamp(memusage, 2, 1024);     // keep memory usage between 2MB and 1GB
+    memusage = CLAMP(memusage, 2, 1024);     // keep memory usage between 2MB and 1GB
     int memsize = (1<<20) * memusage, passlen = strlen(pass), tmpbuflen = 2 * SHA512SIZE, pplen = 2 * (saltlen + passlen);
 
     // prepare the passphrase (including salt)
@@ -840,7 +840,7 @@ void authsetup(char **args, int numargs)  // set up private and public keys
         if(!strcasecmp(args[0], "PRE"))
         {
             // authsetup pre preprivhex [psalthex pwdcfg]
-            preprivlen = numargs > 1 ? clamp(int(strlen(args[1])) / 2, preprivminlen, preprivmaxlen) : 32;
+            preprivlen = numargs > 1 ? CLAMP(int(strlen(args[1])) / 2, preprivminlen, preprivmaxlen) : 32;
             if(numargs > 1) hex2bin(prepriv, args[1], preprivlen);
             if(numargs > 2) hex2bin(psalt, args[2], 16);
             preprivpwdcfg = numargs > 3 ? atoi(args[3]) : 0;
@@ -895,7 +895,7 @@ void authsetup(char **args, int numargs)  // set up private and public keys
         else if(!strcasecmp(args[0], "GENPRE"))
         {
             // authsetup genpre prelen
-            preprivlen = clamp((numargs > 1) ? atoi(args[1]) : 42, preprivminlen, preprivmaxlen);
+            preprivlen = CLAMP((numargs > 1) ? atoi(args[1]) : 42, preprivminlen, preprivmaxlen);
             entropy_get(prepriv, preprivlen);
             preprivpwdcfg = 0;
         }

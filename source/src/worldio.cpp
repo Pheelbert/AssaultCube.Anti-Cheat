@@ -781,7 +781,7 @@ void save_world(char *mname, bool skipoptimise, bool addcomfort)
     header tmp = hdr;
     ucharbuf hx = packheaderextras(addcomfort ? 0 : (1 << HX_EDITUNDO));   // if addcomfort -> add undos/redos
     int writeextra = 0;
-    if(hx.maxlen) tmp.headersize += writeextra = clamp(hx.maxlen, 0, MAXHEADEREXTRA);
+    if(hx.maxlen) tmp.headersize += writeextra = CLAMP(hx.maxlen, 0, MAXHEADEREXTRA);
     tmp.maprevision += advancemaprevision;
     DEBUG("version " << tmp.version << " headersize " << tmp.headersize << " entities " << tmp.numents << " factor " << tmp.sfactor << " revision " << tmp.maprevision);
     lilswap(&tmp.version, 4); // version, headersize, sfactor, numents

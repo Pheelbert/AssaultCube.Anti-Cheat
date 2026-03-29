@@ -291,7 +291,7 @@ struct zipstream : stream
                 case SEEK_SET: pos += info->offset; break;
                 default: return false;
             }
-            pos = clamp(pos, long(info->offset), long(info->offset + info->size));
+            pos = CLAMP(pos, long(info->offset), long(info->offset + info->size));
             arch->owner = NULL;
             if(!arch->data->seek(pos, SEEK_SET)) return false;
             arch->owner = this;

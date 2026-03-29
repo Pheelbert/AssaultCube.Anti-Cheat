@@ -484,7 +484,7 @@ public:
     void damageroll(float damage)
     {
         damage *= effroll > 0.001f || (effroll > -0.001f && rnd(2)) ? 2.0f : -2.0f; // give player a kick
-        effroll = clamp(effroll + damage, -maxrolleffect, maxrolleffect);
+        effroll = CLAMP(effroll + damage, -maxrolleffect, maxrolleffect);
     }
 
     void hitpush(int damage, const vec &dir, playerent *actor, int gun)
