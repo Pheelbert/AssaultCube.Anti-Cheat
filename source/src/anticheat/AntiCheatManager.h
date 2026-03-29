@@ -43,6 +43,13 @@ namespace PhantiCheat {
         // Accessor so the SDL event loop can record events.
         InputTracker* getInputTracker() { return &m_inputTracker; }
 
+        // Debug: configure simulated input anomalies for testing detection.
+        // When active, artificial counter offsets are mixed into each snapshot
+        // so different hook layers report conflicting data.
+        void setInputDebugConfig(const AC_INPUT_DEBUG_CONFIG &cfg);
+        void clearInputDebugConfig();
+        bool isInputDebugActive() const;
+
     private:
         void workerThread();
 

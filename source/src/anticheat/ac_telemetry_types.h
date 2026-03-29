@@ -15,6 +15,7 @@
 #define AC_TELEMETRY_WINDOWS_VERSION  1
 #define AC_TELEMETRY_HEARTBEAT        2
 #define AC_TELEMETRY_INPUT_ANOMALY    3
+#define AC_TELEMETRY_INPUT_DEBUG      4
 
 #define AC_MAX_TELEMETRY_DATA         256
 
@@ -46,7 +47,33 @@ typedef struct {
     uint32_t RawMouseEvents;
     uint32_t SdlKeyEvents;
     uint32_t SdlMouseEvents;
+    uint32_t KeyStateTransitions;
+    uint32_t MouseButtonTransitions;
+    uint32_t AnomalyFlags;
 } AcInputAnomalyData;
+
+// Anomaly flag constants (must match ac_shared.h)
+#define AC_ANOMALY_NONE                  0x00000000
+#define AC_ANOMALY_SDL_WITHOUT_RAW       0x00000001
+#define AC_ANOMALY_SDL_WITHOUT_KEYSTATE  0x00000002
+#define AC_ANOMALY_RAW_WITHOUT_KEYSTATE  0x00000004
+#define AC_ANOMALY_LLHOOK_INJECTED       0x00000008
+#define AC_ANOMALY_KEYSTATE_WITHOUT_SDL  0x00000010
+#define AC_ANOMALY_LAYER_COUNT_MISMATCH  0x00000020
+#define AC_ANOMALY_DEBUG_SIMULATED       0x80000000
+
+// Debug simulation config payload
+typedef struct {
+    uint32_t Active;
+    uint32_t SimulatedSdlKeys;
+    uint32_t SimulatedSdlMouse;
+    uint32_t SimulatedRawKeys;
+    uint32_t SimulatedRawMouse;
+    uint32_t SimulatedKeyStateKeys;
+    uint32_t SimulatedInjectedKeys;
+    uint32_t SimulatedInjectedMouse;
+    uint32_t ForceAnomalyFlags;
+} AcInputDebugConfig;
 
 #pragma pack(pop)
 
