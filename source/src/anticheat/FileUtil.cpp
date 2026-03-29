@@ -1,4 +1,4 @@
-#include "cube.h"
+#include "../cube.h"
 
 #include <windows.h>
 #include <stdexcept>

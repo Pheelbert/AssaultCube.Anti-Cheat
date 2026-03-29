@@ -1,0 +1,267 @@
+[
+  {
+    "id": "kernel_driver",
+    "name": "Kernel Driver (PhantiCheat.sys)",
+    "category": "Kernel-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/driver/driver_main.c",
+    "summary": "Windows kernel-mode driver that provides trusted telemetry from ring-0, where user-mode cheats cannot interfere.",
+    "description": "The PhantiCheat kernel driver is a WDM (Windows Driver Model) driver that loads as a system service. It creates a device object (\\\\Device\\\\PhantiCheat) and communicates with the user-mode AntiCheatManager via IOCTLs. The driver hosts a modular scan engine that executes registered scan modules and returns telemetry data. Because it runs at kernel level, its observations cannot be tampered with by user-mode cheats.",
+    "detections": [],
+    "telemetry": [
+      {
+        "name": "IOCTL_AC_GET_STATUS",
+        "description": "Returns driver version, registered module count, total scan count, and uptime in seconds."
+      },
+      {
+        "name": "IOCTL_AC_GET_TELEMETRY",
+        "description": "Executes all registered scan modules and returns up to 16 telemetry entries, each with a type code and up to 256 bytes of payload data."
+      }
+    ],
+    "tags": ["kernel", "driver", "WDM", "IOCTL", "ring-0", "telemetry"]
+  },
+  {
+    "id": "scan_engine",
+    "name": "Scan Engine",
+    "category": "Kernel-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/driver/scan_engine.h, scan_engine.c",
+    "summary": "Modular framework for registering and executing kernel-level scan modules that produce telemetry entries.",
+    "description": "The scan engine is the core framework inside the kernel driver. It supports up to 32 pluggable scan modules, each registered with a type identifier, a name, and an execute callback. When IOCTL_AC_GET_TELEMETRY is invoked, the engine iterates all registered modules, calls each execute function, and collects the resulting telemetry entries into a response buffer. New detection modules can be added by implementing the AC_SCAN_MODULE_EXECUTE callback and registering via AcScanEngineRegisterModule().",
+    "detections": [],
+    "telemetry": [
+      {
+        "name": "Module Execution",
+        "description": "Each registered module produces one AC_TELEMETRY_ENTRY with a type code (AC_TELEMETRY_*) and a type-specific payload."
+      }
+    ],
+    "tags": ["kernel", "framework", "modular", "scan", "plugin"]
+  },
+  {
+    "id": "heartbeat",
+    "name": "Heartbeat Module",
+    "category": "Kernel-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/driver/modules/heartbeat.c",
+    "summary": "Kernel scan module that reports driver liveness: version, uptime, and scan count.",
+    "description": "The heartbeat module is a kernel scan module that proves the driver is alive and responding. Each time the scan engine executes, this module produces a telemetry entry containing the driver version number, the number of seconds since the driver was loaded, and the total number of scan cycles completed. The user-mode client polls this periodically (every 5 seconds) and relays it to the server. A missing or stale heartbeat indicates the driver may have been unloaded or tampered with.",
+    "detections": [
+      {
+        "name": "Driver Unload Detection",
+        "severity": "HIGH",
+        "description": "If heartbeat telemetry stops arriving at the server after previously being active, it indicates the kernel driver was unloaded or killed — a strong indicator of cheat preparation."
+      }
+    ],
+    "telemetry": [
+      {
+        "name": "AC_TELEMETRY_HEARTBEAT",
+        "description": "Payload: DriverVersion (uint32), UptimeSeconds (uint32), ScanCount (uint32). Proves driver is alive and counting scans."
+      }
+    ],
+    "tags": ["heartbeat", "liveness", "uptime", "driver", "tamper-detection"]
+  },
+  {
+    "id": "windows_version",
+    "name": "Windows Version Module",
+    "category": "Kernel-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/driver/modules/windows_version.c",
+    "summary": "Kernel scan module that reports the client's Windows OS version using the trusted kernel-mode RtlGetVersion() API.",
+    "description": "This kernel scan module uses RtlGetVersion() — the kernel-mode equivalent of GetVersionEx() that cannot be hooked or spoofed by user-mode code — to collect the Windows major version, minor version, build number, and service pack string. This data helps the server identify clients running unusual or modified Windows environments that may be associated with cheat tools.",
+    "detections": [],
+    "telemetry": [
+      {
+        "name": "AC_TELEMETRY_WINDOWS_VERSION",
+        "description": "Payload: MajorVersion (uint32), MinorVersion (uint32), BuildNumber (uint32), CSDVersion (UTF-16 string, 64 chars). Reports the OS version as seen from kernel mode."
+      }
+    ],
+    "tags": ["windows", "OS", "version", "environment", "fingerprint"]
+  },
+  {
+    "id": "anticheat_manager",
+    "name": "AntiCheat Manager",
+    "category": "User-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/AntiCheatManager.h, AntiCheatManager.cpp",
+    "summary": "User-mode manager that connects to the kernel driver, polls for telemetry, and integrates input tracking.",
+    "description": "The AntiCheatManager is the main user-mode orchestrator for all client-side anti-cheat functionality. On initialization, it opens a handle to the PhantiCheat kernel driver device. It spawns a background thread that polls the driver every 5 seconds via IOCTL_AC_GET_TELEMETRY, queuing responses for the network layer to send to the server. It also owns the InputTracker instance and provides accessors for the SDL event loop to record input events. If the driver is not loaded, the manager degrades gracefully and the game continues without kernel-level protection.",
+    "detections": [],
+    "telemetry": [
+      {
+        "name": "Telemetry Relay",
+        "description": "Queues kernel telemetry responses (heartbeat, windows version, etc.) and makes them available for transmission to the server via SV_ANTICHEAT_TELEMETRY network messages."
+      }
+    ],
+    "tags": ["manager", "orchestrator", "driver-communication", "polling", "user-mode"]
+  },
+  {
+    "id": "input_tracker",
+    "name": "Input Tracker (4-Layer)",
+    "category": "User-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/InputTracker.h, InputTracker.cpp",
+    "summary": "Monitors four layers of the Windows input stack to detect simulated or injected input from aimbots and triggerbots.",
+    "description": "The InputTracker cross-references input data from four distinct layers of the Windows input stack to detect cheat tools that inject synthetic input. Layer 1 (Kernel) polls GetAsyncKeyState to read the kernel key-state table directly. Layer 2 (HID) registers for Raw Input (WM_INPUT) to see hardware-level HID events. Layer 3 (Hooks) installs WH_KEYBOARD_LL and WH_MOUSE_LL hooks that detect the LLKHF_INJECTED flag set by the OS on synthetic events. Layer 4 (App) counts SDL events that the game actually processes. Different injection techniques produce different cross-layer signatures, allowing identification of the specific method used.",
+    "detections": [
+      {
+        "name": "SendInput / keybd_event Detection",
+        "severity": "HIGH",
+        "description": "Synthetic input via SendInput or keybd_event appears in layers 2-4 (Raw Input, hooks, SDL) but NOT in layer 1 (GetAsyncKeyState). This asymmetry identifies programmatic input injection commonly used by aimbots and triggerbots."
+      },
+      {
+        "name": "Filter Driver Injection",
+        "severity": "HIGH",
+        "description": "Input injected via a filter driver appears in layer 2 (Raw Input) but NOT in layer 1 (kernel key-state). This detects sophisticated cheats that insert a virtual HID device into the input stack."
+      },
+      {
+        "name": "Message-Level Injection",
+        "severity": "SUSPECT",
+        "description": "Input injected via PostMessage/SendMessage appears in layer 4 (SDL) but NOT in layers 1-2 (kernel or Raw Input). Detects basic automation tools that bypass the input stack entirely."
+      },
+      {
+        "name": "Input Suppression",
+        "severity": "SUSPECT",
+        "description": "Keys pressed physically (visible in layer 1 kernel state) but never reaching the application (layer 4 SDL). May indicate a cheat tool intercepting and modifying input before the game sees it."
+      },
+      {
+        "name": "Low-Level Hook Injected Flag",
+        "severity": "HIGH",
+        "description": "The Windows low-level keyboard/mouse hooks detect the LLKHF_INJECTED and LLMHF_INJECTED flags that the OS sets on all programmatically generated input events."
+      },
+      {
+        "name": "Cross-Layer Count Mismatch",
+        "severity": "SUSPECT",
+        "description": "General divergence between the event counts at different input layers. Even when no single signature matches, significant count mismatches indicate anomalous input handling."
+      }
+    ],
+    "telemetry": [
+      {
+        "name": "AC_TELEMETRY_INPUT_ANOMALY",
+        "description": "Periodic snapshot containing: TimestampMs, InjectedKeyCount, InjectedMouseCount, SyntheticKeyCount, SyntheticMouseCount, RawKeyboardEvents, RawMouseEvents, SdlKeyEvents, SdlMouseEvents, KeyStateTransitions, MouseButtonTransitions, AnomalyFlags bitfield."
+      }
+    ],
+    "tags": ["input", "aimbot", "triggerbot", "injection", "synthetic", "SendInput", "Raw Input", "hooks", "SDL", "cross-layer"]
+  },
+  {
+    "id": "post_process_analyzer",
+    "name": "Post-Process Analyzer",
+    "category": "Server-Side",
+    "platform": "Cross-platform",
+    "location": "source/src/anticheat/PostProcessAnalyzer.h, PostProcessAnalyzer.cpp",
+    "summary": "Server-side correlation engine that cross-references game events with input telemetry over 10-second windows to detect anomalies.",
+    "description": "The PostProcessAnalyzer runs entirely on the server and performs second-pass anomaly detection by correlating game events (shots, hits, kills, reloads) with input telemetry snapshots received from the client. It evaluates 10-second sliding windows per client. Within each window, it accumulates game activity counters and input activity counters, then runs a set of detection rules. This approach catches cheats that might fool individual checks but cannot fake consistent cross-domain correlation over time.",
+    "detections": [
+      {
+        "name": "Shots Without Input",
+        "severity": "HIGH",
+        "description": "Player fires shots but has zero corresponding input events (no SDL key/mouse activity, no key-state transitions). Indicates an automated firing mechanism operating independently of any user input."
+      },
+      {
+        "name": "Hits Without Mouse Movement",
+        "severity": "HIGH",
+        "description": "Player registers hits on other players but has no mouse activity in the same time window. Strong indicator of an aimbot that manipulates game state directly without generating actual mouse movement."
+      },
+      {
+        "name": "Perfect Accuracy",
+        "severity": "SUSPECT",
+        "description": "Hit-to-shot ratio exceeds statistically plausible thresholds within a 10-second window (requires minimum 5 shots). Flags implausibly accurate players for further monitoring."
+      },
+      {
+        "name": "Actions Without Key-State",
+        "severity": "SUSPECT",
+        "description": "Movement, reload, or other key-bound actions occur with zero keyboard state transitions. Suggests automated gameplay without physical key presses."
+      },
+      {
+        "name": "Input Telemetry Gap",
+        "severity": "SUSPECT",
+        "description": "Expected telemetry snapshots from the client never arrive during a window where game activity is recorded. May indicate the client is suppressing telemetry to hide cheat activity."
+      }
+    ],
+    "telemetry": [
+      {
+        "name": "PPEvalResult",
+        "description": "Per-window evaluation result containing: anomalyFlags bitfield, maxSeverity (INFO/SUSPECT/HIGH), and up to 8 individual rule results each with flag, severity, and description."
+      }
+    ],
+    "tags": ["server-side", "correlation", "accuracy", "aimbot", "automation", "telemetry-gap", "game-events"]
+  },
+  {
+    "id": "file_integrity",
+    "name": "File Integrity Checker",
+    "category": "User-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/FileIntegrityChecker.h, FileIntegrityChecker.cpp",
+    "summary": "Validates game file integrity by computing FNV-1a hashes and comparing against known-good values.",
+    "description": "The FileIntegrityChecker computes FNV-1a hashes for a list of game files (maps, textures, models, etc.) and returns a map of file paths to their computed hash values. The server can compare these against known-good hashes to detect modified game assets — a common technique used by wallhack and texture-replacement cheats. Uses the HashUtil class for fast, lightweight hashing.",
+    "detections": [
+      {
+        "name": "Modified Game Files",
+        "severity": "HIGH",
+        "description": "Hash mismatch between client's reported file hash and the server's known-good hash indicates the game file has been modified. Common modifications include transparent textures (wallhack), modified models (enlarged hitboxes), or altered game scripts."
+      }
+    ],
+    "telemetry": [
+      {
+        "name": "File Hash Report",
+        "description": "Map of file paths to their FNV-1a hash strings, computed from the game's installation directory."
+      }
+    ],
+    "tags": ["file", "integrity", "hash", "wallhack", "texture", "modification", "tamper"]
+  },
+  {
+    "id": "memory_integrity",
+    "name": "Memory Integrity Checker",
+    "category": "User-Mode",
+    "platform": "Windows",
+    "location": "source/src/anticheat/MemoryIntegrityChecker.h, MemoryIntegrityChecker.cpp",
+    "summary": "Hashes in-memory PE sections to detect runtime code patching, DLL injection, and hooking.",
+    "description": "The MemoryIntegrityChecker inspects loaded modules in the game process by parsing PE headers and hashing individual sections (e.g., .text, .rdata). It can list all modules loaded in the current process via EnumProcessModules, enumerate sections within any module, and compute FNV-1a hashes of section contents. By comparing runtime section hashes against known-good values, it detects code patching (function hooking), DLL injection, and other memory manipulation techniques used by cheats.",
+    "detections": [
+      {
+        "name": "Code Section Modification",
+        "severity": "HIGH",
+        "description": "The .text section hash of the game executable or loaded DLLs differs from the expected value, indicating runtime code patching. This is the primary technique for function hooking used by cheats to intercept and modify game behavior."
+      },
+      {
+        "name": "Unexpected Module Injection",
+        "severity": "HIGH",
+        "description": "EnumProcessModules reveals DLLs loaded in the game process that are not part of the expected module set. Injected DLLs are the most common delivery mechanism for cheat functionality."
+      }
+    ],
+    "telemetry": [
+      {
+        "name": "Module List",
+        "description": "List of all loaded module paths in the game process, obtained via EnumProcessModules."
+      },
+      {
+        "name": "Section Hash",
+        "description": "FNV-1a hash of a specific PE section (e.g., .text) within a loaded module."
+      }
+    ],
+    "tags": ["memory", "integrity", "PE", "injection", "DLL", "hooking", "code-patching", "runtime"]
+  },
+  {
+    "id": "hash_util",
+    "name": "Hash Utility",
+    "category": "Utility",
+    "platform": "Cross-platform",
+    "location": "source/src/anticheat/HashUtil.h, HashUtil.cpp",
+    "summary": "FNV-1a hashing utility used by file and memory integrity checkers.",
+    "description": "Provides fast FNV-1a (Fowler-Noll-Vo) hash computation for both files and raw memory buffers. The 32-bit FNV-1a algorithm is chosen for its speed and simplicity — it processes data in a streaming fashion with minimal memory overhead, making it suitable for hashing large game files and PE sections without significant performance impact. Used internally by FileIntegrityChecker and MemoryIntegrityChecker.",
+    "detections": [],
+    "telemetry": [],
+    "tags": ["utility", "hash", "FNV-1a", "checksum"]
+  },
+  {
+    "id": "file_util",
+    "name": "File Utility",
+    "category": "Utility",
+    "platform": "Windows",
+    "location": "source/src/anticheat/FileUtil.h, FileUtil.cpp",
+    "summary": "Path manipulation utilities for resolving game file paths relative to the executable.",
+    "description": "Provides helper functions for working with file paths in the anti-cheat system: getExecutableDirectory() retrieves the game's installation path, makePathRelativeToExe() converts absolute paths to relative paths for consistent hash reporting, and buildAbsolutePath() constructs full paths from directory and file components. Uses Windows API (GetModuleFileNameA) for path resolution.",
+    "detections": [],
+    "telemetry": [],
+    "tags": ["utility", "path", "file", "directory"]
+  }
+]

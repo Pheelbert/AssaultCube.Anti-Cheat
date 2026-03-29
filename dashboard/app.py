@@ -257,6 +257,57 @@ def api_logs_read(filename):
         return jsonify({"error": str(e)}), 500
 
 
+# Load anticheat module documentation
+_MODULES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "anticheat_modules.json")
+
+def _load_modules():
+    try:
+        with open(_MODULES_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+@app.route("/api/modules")
+def api_modules():
+    """Return anticheat module documentation. Supports query params:
+    - q: search query (matches against name, description, tags, detections)
+    - category: filter by category (Kernel-Mode, User-Mode, Server-Side, Utility)
+    - severity: filter detections by minimum severity (INFO, SUSPECT, HIGH)
+    """
+    modules = _load_modules()
+    q = request.args.get("q", "").strip().lower()
+    category = request.args.get("category", "").strip()
+    severity = request.args.get("severity", "").strip().upper()
+
+    if category:
+        modules = [m for m in modules if m.get("category", "").lower() == category.lower()]
+
+    if q:
+        def matches(mod):
+            searchable = " ".join([
+                mod.get("name", ""),
+                mod.get("summary", ""),
+                mod.get("description", ""),
+                " ".join(mod.get("tags", [])),
+                " ".join(d.get("name", "") + " " + d.get("description", "") for d in mod.get("detections", [])),
+                " ".join(t.get("name", "") + " " + t.get("description", "") for t in mod.get("telemetry", [])),
+            ]).lower()
+            return all(term in searchable for term in q.split())
+        modules = [m for m in modules if matches(m)]
+
+    if severity:
+        sev_order = {"INFO": 0, "SUSPECT": 1, "HIGH": 2}
+        min_sev = sev_order.get(severity, 0)
+        def has_severity(mod):
+            if not mod.get("detections"):
+                return min_sev == 0
+            return any(sev_order.get(d.get("severity", "INFO").upper(), 0) >= min_sev for d in mod["detections"])
+        modules = [m for m in modules if has_severity(m)]
+
+    return jsonify({"modules": modules, "total": len(modules)})
+
+
 DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -671,6 +722,193 @@ tr:last-child td { border-bottom: none; }
 .disconnected-row:hover td {
     opacity: 0.8;
 }
+
+/* AC Modules documentation */
+.modules-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+.modules-toolbar input {
+    flex: 1;
+    min-width: 250px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    outline: none;
+}
+.modules-toolbar input:focus { border-color: var(--accent); }
+.modules-toolbar input::placeholder { color: var(--text-dim); }
+.modules-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.modules-filter-group label {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+.modules-filter-group select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    outline: none;
+}
+.modules-filter-group select:focus { border-color: var(--accent); }
+.modules-result-count {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-left: auto;
+}
+
+.module-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+}
+.module-card:hover { border-color: var(--accent); }
+.module-card-header {
+    padding: 16px 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    user-select: none;
+}
+.module-card-header .module-expand {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    margin-top: 5px;
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.module-card.expanded .module-card-header .module-expand {
+    transform: rotate(90deg);
+    color: var(--accent);
+}
+.module-card-header .module-info { flex: 1; }
+.module-card-header .module-name {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+.module-card-header .module-summary {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.4;
+}
+.module-card-header .module-badges {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+.module-card-body {
+    display: none;
+    border-top: 1px solid var(--border);
+    padding: 20px;
+}
+.module-card.expanded .module-card-body { display: block; }
+.module-description {
+    font-size: 0.88rem;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 20px;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-radius: 8px;
+}
+.module-section-title {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    font-weight: 600;
+    margin-bottom: 10px;
+    margin-top: 16px;
+}
+.module-section-title:first-child { margin-top: 0; }
+.detection-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+.detection-item .detection-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.detection-item .detection-name {
+    font-weight: 600;
+    font-size: 0.88rem;
+}
+.detection-item .detection-desc {
+    font-size: 0.83rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+.telemetry-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+.telemetry-item .telemetry-name {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--accent);
+    margin-bottom: 4px;
+}
+.telemetry-item .telemetry-desc {
+    font-size: 0.83rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+}
+.module-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+}
+.module-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+}
+.module-location {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    margin-bottom: 16px;
+}
+.severity-high { background: rgba(247, 79, 79, 0.15); color: var(--red); }
+.severity-suspect { background: rgba(247, 169, 79, 0.15); color: var(--orange); }
+.severity-info { background: rgba(139, 144, 160, 0.15); color: var(--text-dim); }
+.category-kernel { background: rgba(167, 123, 252, 0.15); color: var(--purple); }
+.category-user { background: rgba(79, 143, 247, 0.15); color: var(--accent); }
+.category-server { background: rgba(61, 214, 140, 0.15); color: var(--green); }
+.category-utility { background: rgba(139, 144, 160, 0.15); color: var(--text-dim); }
+.search-highlight { background: rgba(247, 228, 79, 0.3); border-radius: 2px; }
 </style>
 </head>
 <body>
@@ -690,6 +928,7 @@ tr:last-child td { border-bottom: none; }
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
         <button class="tab-btn" onclick="switchTab('logs')">Server Logs</button>
+        <button class="tab-btn" onclick="switchTab('modules')">AC Modules</button>
     </div>
 
     <div id="tab-dashboard" class="tab-content active">
@@ -782,6 +1021,35 @@ tr:last-child td { border-bottom: none; }
         </div>
     </div>
     </div><!-- end tab-logs -->
+
+    <div id="tab-modules" class="tab-content">
+    <div class="modules-toolbar">
+        <input type="text" id="moduleSearchInput" placeholder="Search modules, detections, telemetry..." oninput="onModuleSearchDebounced()">
+        <div class="modules-filter-group">
+            <label>Category:</label>
+            <select id="moduleCategorySelect" onchange="loadModules()">
+                <option value="">All</option>
+                <option value="Kernel-Mode">Kernel-Mode</option>
+                <option value="User-Mode">User-Mode</option>
+                <option value="Server-Side">Server-Side</option>
+                <option value="Utility">Utility</option>
+            </select>
+        </div>
+        <div class="modules-filter-group">
+            <label>Min Severity:</label>
+            <select id="moduleSeveritySelect" onchange="loadModules()">
+                <option value="">Any</option>
+                <option value="INFO">INFO</option>
+                <option value="SUSPECT">SUSPECT</option>
+                <option value="HIGH">HIGH</option>
+            </select>
+        </div>
+        <span id="moduleResultCount" class="modules-result-count"></span>
+    </div>
+    <div id="modulesContent">
+        <div class="empty-state">Loading module documentation...</div>
+    </div>
+    </div><!-- end tab-modules -->
 
 </div>
 
@@ -1150,6 +1418,10 @@ function switchTab(tab) {
         logsInitialized = true;
         loadLogFileList();
     }
+    if (tab === 'modules' && !modulesInitialized) {
+        modulesInitialized = true;
+        loadModules();
+    }
 }
 
 // --- Logs viewer ---
@@ -1281,6 +1553,159 @@ function setupLogAutoRefresh() {
 
 function toggleLogAutoRefresh() {
     setupLogAutoRefresh();
+}
+
+// --- AC Modules documentation ---
+let modulesInitialized = false;
+let moduleSearchTimer = null;
+let expandedModules = new Set();
+let cachedModules = [];
+
+function categoryBadgeClass(cat) {
+    if (cat === 'Kernel-Mode') return 'category-kernel';
+    if (cat === 'User-Mode') return 'category-user';
+    if (cat === 'Server-Side') return 'category-server';
+    return 'category-utility';
+}
+
+function severityBadgeClass(sev) {
+    if (sev === 'HIGH') return 'severity-high';
+    if (sev === 'SUSPECT') return 'severity-suspect';
+    return 'severity-info';
+}
+
+function highlightText(text, query) {
+    if (!query) return escapeHtml(text);
+    const escaped = escapeHtml(text);
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    let result = escaped;
+    for (const term of terms) {
+        const regex = new RegExp('(' + escapeRegex(term) + ')', 'gi');
+        result = result.replace(regex, '<span class="search-highlight">$1</span>');
+    }
+    return result;
+}
+
+function toggleModule(id) {
+    if (expandedModules.has(id)) {
+        expandedModules.delete(id);
+    } else {
+        expandedModules.add(id);
+    }
+    renderModules(cachedModules);
+}
+
+async function loadModules() {
+    const q = document.getElementById('moduleSearchInput').value;
+    const category = document.getElementById('moduleCategorySelect').value;
+    const severity = document.getElementById('moduleSeveritySelect').value;
+
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (category) params.set('category', category);
+    if (severity) params.set('severity', severity);
+
+    try {
+        const res = await fetch('/api/modules?' + params);
+        const data = await res.json();
+        cachedModules = data.modules;
+        document.getElementById('moduleResultCount').textContent =
+            data.total + ' module' + (data.total !== 1 ? 's' : '') + ' found';
+        renderModules(data.modules);
+    } catch (e) {
+        document.getElementById('modulesContent').innerHTML =
+            '<div class="empty-state">Failed to load modules: ' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+function renderModules(modules) {
+    const el = document.getElementById('modulesContent');
+    const query = document.getElementById('moduleSearchInput').value;
+
+    if (!modules || modules.length === 0) {
+        el.innerHTML = '<div class="empty-state">No modules match the current search and filters</div>';
+        return;
+    }
+
+    let html = '';
+    for (const m of modules) {
+        const isExpanded = expandedModules.has(m.id);
+        const expandedClass = isExpanded ? ' expanded' : '';
+
+        html += '<div class="module-card' + expandedClass + '">';
+
+        // Header
+        html += '<div class="module-card-header" onclick="toggleModule(\'' + m.id + '\')">';
+        html += '<span class="module-expand">&#9654;</span>';
+        html += '<div class="module-info">';
+        html += '<div class="module-name">' + highlightText(m.name, query) + '</div>';
+        html += '<div class="module-summary">' + highlightText(m.summary, query) + '</div>';
+        html += '</div>';
+        html += '<div class="module-badges">';
+        html += '<span class="badge ' + categoryBadgeClass(m.category) + '">' + escapeHtml(m.category) + '</span>';
+        html += '<span class="badge badge-dim">' + escapeHtml(m.platform) + '</span>';
+
+        // Show max severity badge if has detections
+        if (m.detections && m.detections.length > 0) {
+            const sevOrder = ['INFO', 'SUSPECT', 'HIGH'];
+            let maxSev = 'INFO';
+            for (const d of m.detections) {
+                if (sevOrder.indexOf(d.severity) > sevOrder.indexOf(maxSev)) maxSev = d.severity;
+            }
+            html += '<span class="badge ' + severityBadgeClass(maxSev) + '">' + m.detections.length + ' detection' + (m.detections.length !== 1 ? 's' : '') + '</span>';
+        }
+        html += '</div>';
+        html += '</div>';
+
+        // Body (expanded content)
+        html += '<div class="module-card-body">';
+        html += '<div class="module-location">' + escapeHtml(m.location) + '</div>';
+        html += '<div class="module-description">' + highlightText(m.description, query) + '</div>';
+
+        // Detections
+        if (m.detections && m.detections.length > 0) {
+            html += '<div class="module-section-title">Detections</div>';
+            for (const d of m.detections) {
+                html += '<div class="detection-item">';
+                html += '<div class="detection-header">';
+                html += '<span class="detection-name">' + highlightText(d.name, query) + '</span>';
+                html += '<span class="badge ' + severityBadgeClass(d.severity) + '">' + d.severity + '</span>';
+                html += '</div>';
+                html += '<div class="detection-desc">' + highlightText(d.description, query) + '</div>';
+                html += '</div>';
+            }
+        }
+
+        // Telemetry
+        if (m.telemetry && m.telemetry.length > 0) {
+            html += '<div class="module-section-title">Telemetry</div>';
+            for (const t of m.telemetry) {
+                html += '<div class="telemetry-item">';
+                html += '<div class="telemetry-name">' + highlightText(t.name, query) + '</div>';
+                html += '<div class="telemetry-desc">' + highlightText(t.description, query) + '</div>';
+                html += '</div>';
+            }
+        }
+
+        // Tags
+        if (m.tags && m.tags.length > 0) {
+            html += '<div class="module-tags">';
+            for (const tag of m.tags) {
+                html += '<span class="module-tag">' + highlightText(tag, query) + '</span>';
+            }
+            html += '</div>';
+        }
+
+        html += '</div>'; // module-card-body
+        html += '</div>'; // module-card
+    }
+
+    el.innerHTML = html;
+}
+
+function onModuleSearchDebounced() {
+    clearTimeout(moduleSearchTimer);
+    moduleSearchTimer = setTimeout(loadModules, 250);
 }
 
 </script>
