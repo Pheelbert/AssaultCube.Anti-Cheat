@@ -9,52 +9,6 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Linux 64-bit  -  Client + Server (clang++)
-  # ---------------------------------------------------------------------------
-  linux64:
-    name: Linux 64-bit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            libsdl2-dev \
-            libsdl2-image-dev \
-            zlib1g-dev \
-            libogg-dev \
-            libvorbis-dev \
-            libopenal-dev \
-            libcurl4-openssl-dev
-
-      - name: Build client and server
-        working-directory: source/src
-        run: |
-          make clean
-          make -j$(nproc)
-          make install
-
-      - name: Verify binaries
-        run: |
-          test -f bin_unix/native_client && echo "Client OK" || exit 1
-          test -f bin_unix/native_server && echo "Server OK" || exit 1
-
-      - name: Upload Linux client
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux64-client
-          path: bin_unix/native_client
-
-      - name: Upload Linux server
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux64-server
-          path: bin_unix/native_server
-
-  # ---------------------------------------------------------------------------
   # Windows 32-bit  -  Client (Release) + Server (Standalone), includes anticheat
   # ---------------------------------------------------------------------------
   windows:
@@ -89,3 +43,40 @@ jobs:
         with:
           name: windows-server
           path: bin_win32/ac_server.exe
+
+  # ---------------------------------------------------------------------------
+  # Windows kernel-mode driver (WDM) - PhantiCheat anti-cheat driver
+  # ---------------------------------------------------------------------------
+  kernel-driver:
+    name: Kernel Driver (WDK)
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Windows Driver Kit
+        uses: microsoft/setup-wdk@v1
+
+      - name: Build kernel driver (${{ matrix.configuration }})
+        run: >
+          msbuild source\src\anticheat\driver\phanticheat.vcxproj
+          /p:Configuration=${{ matrix.configuration }}
+          /p:Platform=x64
+          /m
+
+      - name: Verify driver binary
+        shell: bash
+        run: |
+          DRIVER_PATH="bin_win32/driver/${{ matrix.configuration }}/phanticheat.sys"
+          test -f "$DRIVER_PATH" && echo "Driver OK (${{ matrix.configuration }})" || exit 1
+
+      - name: Upload driver artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-driver-${{ matrix.configuration }}
+          path: bin_win32/driver/${{ matrix.configuration }}/phanticheat.sys
