@@ -56,20 +56,33 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
-      - name: Find Windows Driver Kit
-        id: find-wdk
+      - name: Install Windows Driver Kit
         shell: pwsh
         run: |
-          # WDK is pre-installed on windows-latest runners.
-          # Locate the latest WDK installation and expose it to MSBuild.
-          $wdkRoot = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -Name 'KitsRoot10' |
-                     Select-Object -ExpandProperty KitsRoot10
-          if (-not $wdkRoot) {
-            Write-Error "WDK not found on this runner"
+          $ProgressPreference = 'SilentlyContinue'
+
+          # Download the WDK 10 online installer (stable Microsoft redirect).
+          Write-Host 'Downloading WDK installer...'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2272234' `
+            -OutFile "$env:TEMP\wdksetup.exe"
+
+          # Install WDK silently (includes headers, libs and MSBuild targets).
+          Write-Host 'Installing WDK (this may take a few minutes)...'
+          $proc = Start-Process -Wait -PassThru "$env:TEMP\wdksetup.exe" `
+            -ArgumentList '/features','+','/quiet','/norestart','/ceip','off'
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "WDK installation failed (exit code $($proc.ExitCode))"
             exit 1
           }
-          Write-Host "WDK root: $wdkRoot"
-          echo "WDK_ROOT=$wdkRoot" >> $env:GITHUB_ENV
+
+          # Expose the WDK root so MSBuild can locate the toolset & headers.
+          $kitsRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots').KitsRoot10
+          if (-not $kitsRoot) {
+            Write-Error 'WDK registry key not found after installation'
+            exit 1
+          }
+          Write-Host "WDK installed at: $kitsRoot"
+          echo "WDKContentRoot=$kitsRoot" >> $env:GITHUB_ENV
 
       - name: Build kernel driver (Release)
         run: >
