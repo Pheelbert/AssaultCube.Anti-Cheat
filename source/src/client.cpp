@@ -2,9 +2,9 @@
 
 #include "cube.h"
 #include "bot/bot.h"
-#include "FileIntegrityChecker.h"
-#include "MemoryIntegrityChecker.h"
-#include "FileUtil.h"
+#include "anticheat/FileIntegrityChecker.h"
+#include "anticheat/MemoryIntegrityChecker.h"
+#include "anticheat/FileUtil.h"
 #ifdef WIN32
 #include "anticheat/AntiCheatManager.h"
 #endif

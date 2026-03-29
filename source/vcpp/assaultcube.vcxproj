@@ -409,10 +409,10 @@
     <ClInclude Include="..\src\crypto_tools.h" />
     <ClInclude Include="..\src\cube.h" />
     <ClInclude Include="..\src\entity.h" />
-    <ClInclude Include="..\src\FileIntegrityChecker.h" />
-    <ClInclude Include="..\src\FileUtil.h" />
+    <ClInclude Include="..\src\anticheat\FileIntegrityChecker.h" />
+    <ClInclude Include="..\src\anticheat\FileUtil.h" />
     <ClInclude Include="..\src\geom.h" />
-    <ClInclude Include="..\src\HashUtil.h" />
+    <ClInclude Include="..\src\anticheat\HashUtil.h" />
     <ClInclude Include="..\src\hudgun.h" />
     <CustomBuildStep Include="..\src\md2.h">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
@@ -422,7 +422,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone|Win32'">true</ExcludedFromBuild>
     </CustomBuildStep>
-    <ClInclude Include="..\src\MemoryIntegrityChecker.h" />
+    <ClInclude Include="..\src\anticheat\MemoryIntegrityChecker.h" />
     <ClInclude Include="..\src\model.h" />
     <ClInclude Include="..\src\modelcache.h" />
     <ClInclude Include="..\src\platform.h" />
@@ -518,10 +518,10 @@
     <ClCompile Include="..\src\anticheat\InputTracker.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="..\src\FileIntegrityChecker.cpp" />
-    <ClCompile Include="..\src\FileUtil.cpp" />
-    <ClCompile Include="..\src\HashUtil.cpp" />
-    <ClCompile Include="..\src\MemoryIntegrityChecker.cpp" />
+    <ClCompile Include="..\src\anticheat\FileIntegrityChecker.cpp" />
+    <ClCompile Include="..\src\anticheat\FileUtil.cpp" />
+    <ClCompile Include="..\src\anticheat\HashUtil.cpp" />
+    <ClCompile Include="..\src\anticheat\MemoryIntegrityChecker.cpp" />
     <ClCompile Include="..\src\rendercubes.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Standalone|Win32'">true</ExcludedFromBuild>
