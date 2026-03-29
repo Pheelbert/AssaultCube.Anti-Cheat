@@ -80,3 +80,73 @@ jobs:
         with:
           name: kernel-driver-${{ matrix.configuration }}
           path: bin_win32/driver/${{ matrix.configuration }}/phanticheat.sys
+
+  # ---------------------------------------------------------------------------
+  # Release – create a GitHub Release with all build artifacts (push only)
+  # Deletes all previous releases so only the latest build is available.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish Release
+    if: github.event_name == 'push'
+    needs: [windows, kernel-driver]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Delete previous releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --json tagName -q '.[].tagName' | while read -r tag; do
+            echo "Deleting release $tag"
+            gh release delete "$tag" --yes --cleanup-tag
+          done
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="build-$(date -u +%Y%m%d-%H%M%S)"
+          gh release create "$TAG" \
+            --title "Latest Build ($(date -u +%Y-%m-%d))" \
+            --notes "Automated build from commit ${{ github.sha }}" \
+            --latest \
+            artifacts/windows-client/ac_client.exe \
+            artifacts/windows-server/ac_server.exe \
+            artifacts/kernel-driver-Debug/phanticheat.sys#phanticheat-debug.sys \
+            artifacts/kernel-driver-Release/phanticheat.sys#phanticheat-release.sys
+
+  # ---------------------------------------------------------------------------
+  # Notify – post a build summary (runs on success or failure)
+  # ---------------------------------------------------------------------------
+  notify:
+    name: Build Summary
+    if: always() && github.event_name == 'push'
+    needs: [windows, kernel-driver, release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build notification
+        run: |
+          if [ "${{ needs.windows.result }}" = "success" ] && \
+             [ "${{ needs.kernel-driver.result }}" = "success" ] && \
+             [ "${{ needs.release.result }}" = "success" ]; then
+            echo "## :white_check_mark: Build Succeeded" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "All jobs completed successfully for \`${{ github.sha }}\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "A new release has been published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## :x: Build Failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
+            echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Windows (MSVC) | ${{ needs.windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Kernel Driver | ${{ needs.kernel-driver.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Release | ${{ needs.release.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          fi
