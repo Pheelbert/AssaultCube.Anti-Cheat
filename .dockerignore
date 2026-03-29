@@ -1,0 +1,12 @@
+bin_unix/
+bin_win32/
+*.exe
+*.o
+*.gch
+.git
+demos/
+screenshots/
+docs/
+mods/
+.github/
+.travis.yml

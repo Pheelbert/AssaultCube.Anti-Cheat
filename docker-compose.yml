@@ -1,0 +1,10 @@
+services:
+  acserver:
+    build: .
+    ports:
+      - "28763:28763/udp"
+      - "28764:28764/udp"
+    volumes:
+      - ./config:/ac/config
+      - ./logs:/ac/logs
+    restart: unless-stopped

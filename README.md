@@ -39,6 +39,60 @@ Most of this README was directly copied from the
 [AssaultCube Homepage](https://assault.cubers.net), which should have everything
 you need in relation to AssaultCube.
 
+## Running the Server with Docker
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/)
+
+### Quick Start
+
+```bash
+docker compose up -d
+```
+
+This builds the server image and starts it in the background. The server listens on **UDP ports 28763** (game) and **28764** (server info).
+
+### Configuration
+
+Server config files live in the `config/` directory and are bind-mounted into the container, so edits take effect without rebuilding the image. Key files:
+
+| File | Purpose |
+|------|---------|
+| `config/servercmdline.txt` | Startup flags (port, max clients, MOTD, etc.) |
+| `config/maprot.cfg` | Map rotation |
+| `config/serverpwd.cfg` | Server and admin passwords |
+| `config/serverblacklist.cfg` | IP blacklist |
+| `config/serverparameters.cfg` | Runtime parameters (re-read every 60 s) |
+
+After editing config, restart the server:
+
+```bash
+docker compose restart
+```
+
+### Rebuilding After Code Changes
+
+When you modify server source code, rebuild and restart:
+
+```bash
+docker compose up -d --build
+```
+
+### Viewing Logs
+
+```bash
+docker compose logs -f
+```
+
+Server file logs are also persisted to the `logs/` directory on the host.
+
+### Stopping the Server
+
+```bash
+docker compose down
+```
+
 ## Contributing:
 
 Learn [how to become a contributor and submit your own code](CONTRIBUTING.md)
