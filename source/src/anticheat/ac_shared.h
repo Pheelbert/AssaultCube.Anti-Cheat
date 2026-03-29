@@ -30,6 +30,7 @@
 #define AC_TELEMETRY_NONE             0
 #define AC_TELEMETRY_WINDOWS_VERSION  1
 #define AC_TELEMETRY_HEARTBEAT        2
+#define AC_TELEMETRY_INPUT_ANOMALY    3
 
 // Limits
 #define AC_MAX_TELEMETRY_ENTRIES  16
@@ -76,6 +77,20 @@ typedef struct _AC_HEARTBEAT_DATA {
     ULONG UptimeSeconds;
     ULONG ScanCount;
 } AC_HEARTBEAT_DATA;
+
+// Payload for AC_TELEMETRY_INPUT_ANOMALY (fits inside AC_TELEMETRY_ENTRY.Data)
+// Produced by user-mode InputTracker, not by the kernel driver.
+typedef struct _AC_INPUT_ANOMALY_DATA {
+    ULONG TimestampMs;              // GetTickCount() when snapshot was taken
+    ULONG InjectedKeyCount;         // Keyboard events with LLKHF_INJECTED flag
+    ULONG InjectedMouseCount;       // Mouse events with LLMHF_INJECTED flag
+    ULONG SyntheticKeyCount;        // SendInput / keybd_event detected via Raw Input gap
+    ULONG SyntheticMouseCount;      // SendInput / mouse_event detected via Raw Input gap
+    ULONG RawKeyboardEvents;        // Total raw keyboard events in window
+    ULONG RawMouseEvents;           // Total raw mouse events in window
+    ULONG SdlKeyEvents;            // Total SDL key events in window
+    ULONG SdlMouseEvents;          // Total SDL mouse events in window
+} AC_INPUT_ANOMALY_DATA;
 
 #pragma pack(pop)
 

@@ -1,6 +1,10 @@
 // main.cpp: initialisation & main loop
 
 #include "cube.h"
+#ifdef WIN32
+#include "anticheat/AntiCheatManager.h"
+#include <SDL_syswm.h>
+#endif
 
 void cleanup(char *msg)         // single program exit point;
 {
@@ -845,8 +849,39 @@ int ignoremouse = 5, bootstrapentropy = 2;
 //#define EVENTDEBUG(x)
 EVENTDEBUG(VAR(debugevents, 0, 0, 2));
 
+#ifdef WIN32
+// SDL native event filter: intercepts WM_INPUT before SDL processes it.
+// This lets us count raw hardware input events for the anticheat.
+static int SDLCALL acInputEventFilter(void *userdata, SDL_Event *event)
+{
+    if (event->type == SDL_SYSWMEVENT)
+    {
+        SDL_SysWMmsg *msg = event->syswm.msg;
+        if (msg && msg->subsystem == SDL_SYSWM_WINDOWS && msg->msg.win.msg == WM_INPUT)
+        {
+            extern PhantiCheat::InputTracker *getinputtracker();
+            PhantiCheat::InputTracker *tracker = getinputtracker();
+            if (tracker)
+                tracker->processRawInput(msg->msg.win.lParam);
+        }
+    }
+    return 1; // allow event to propagate
+}
+
+static bool ac_input_filter_installed = false;
+#endif
+
 void checkinput()
 {
+#ifdef WIN32
+    if (!ac_input_filter_installed)
+    {
+        SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
+        SDL_AddEventWatch(acInputEventFilter, NULL);
+        ac_input_filter_installed = true;
+    }
+#endif
+
     SDL_Event event;
     Uint32 lasttype = 0, lastbut = 0;
     int tdx=0,tdy=0;
@@ -873,6 +908,9 @@ void checkinput()
                 EVENTDEBUG(concatformatstring(eb, " sym %d (%Xh), scancode %d (%Xh), state %d, repeat %d", event.key.keysym.sym, event.key.keysym.sym, event.key.keysym.scancode, event.key.keysym.scancode, event.key.state, event.key.repeat));
                 if(event.key.keysym.sym == SDLK_SCANCODE_MASK) event.key.keysym.sym |= event.key.keysym.scancode; // workaround SDL 2.0.5 bug which returns sym == 40000000h for all dead keys
                 if(!event.key.repeat || keyrepeatmask) keypress(event.key.keysym.sym, event.key.keysym.scancode, event.key.state==SDL_PRESSED, (SDL_Keymod)event.key.keysym.mod);
+                #ifdef WIN32
+                { extern PhantiCheat::InputTracker *getinputtracker(); PhantiCheat::InputTracker *t = getinputtracker(); if(t) t->recordSdlKeyEvent(); }
+                #endif
                 break;
 
             case SDL_TEXTINPUT:
@@ -959,6 +997,9 @@ void checkinput()
 
             case SDL_MOUSEMOTION:
                 EVENTDEBUG(thres = 2; concatformatstring(eb, "(SDL_MOUSEMOTION) x %d, y %d, dx %d, dy %d", event.motion.x, event.motion.y, event.motion.xrel, event.motion.yrel));
+                #ifdef WIN32
+                { extern PhantiCheat::InputTracker *getinputtracker(); PhantiCheat::InputTracker *t = getinputtracker(); if(t) t->recordSdlMouseEvent(); }
+                #endif
                 if(ignoremouse) { ignoremouse--; break; }
                 if(grabinput && !skipmousemotion(event))
                 {
@@ -993,6 +1034,9 @@ void checkinput()
 
             case SDL_MOUSEBUTTONUP:
                 EVENTDEBUG(concatformatstring(eb, "(SDL_MOUSEBUTTON%s) button %d, state %d, clicks %d, x %d, y %d", event.type == SDL_MOUSEBUTTONUP ? "UP" : "DOWN", event.button.button, event.button.state, event.button.clicks, event.button.x, event.button.y));
+                #ifdef WIN32
+                { extern PhantiCheat::InputTracker *getinputtracker(); PhantiCheat::InputTracker *t = getinputtracker(); if(t) t->recordSdlMouseEvent(); }
+                #endif
                 if(lasttype==event.type && lastbut==event.button.button) break;
                 keypress(-(event.button.button > 3 ? (event.button.button + 4) : event.button.button), 0, event.button.state != SDL_RELEASED);
                 lasttype = event.type;
@@ -1001,6 +1045,9 @@ void checkinput()
 
             case SDL_MOUSEWHEEL:
                 EVENTDEBUG(concatformatstring(eb, "(SDL_MOUSEWHEEL) x %d, y %d", event.wheel.x, event.wheel.y));
+                #ifdef WIN32
+                { extern PhantiCheat::InputTracker *getinputtracker(); PhantiCheat::InputTracker *t = getinputtracker(); if(t) t->recordSdlMouseEvent(); }
+                #endif
                 if(event.wheel.y)
                 {
                     int key = event.wheel.y > 0 ? SDL_AC_BUTTON_WHEELUP : SDL_AC_BUTTON_WHEELDOWN;
@@ -1386,6 +1433,19 @@ int main(int argc, char **argv)
 #endif
 
     SDL_ShowCursor(0);
+
+    // Initialize anticheat input tracking now that we have a window
+    #ifdef WIN32
+    {
+        SDL_SysWMinfo wmInfo;
+        SDL_VERSION(&wmInfo.version);
+        if (SDL_GetWindowWMInfo(screen, &wmInfo) && wmInfo.subsystem == SDL_SYSWM_WINDOWS)
+        {
+            extern bool initanticheatinput(HWND hwnd);
+            initanticheatinput(wmInfo.info.win.window);
+        }
+    }
+    #endif
 
     initlog("gl");
     gl_checkextensions();

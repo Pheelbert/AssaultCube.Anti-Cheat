@@ -47,8 +47,9 @@ namespace PhantiCheat {
                       << "Kernel anti-cheat will not be active." << std::endl;
             m_driverConnected.store(false);
 
-            // Still start the thread so it can retry later if needed,
-            // but for now we just return false.
+            // Start background thread anyway for input tracking polling
+            m_running.store(true);
+            m_worker = std::thread(&AntiCheatManager::workerThread, this);
             return false;
         }
 
@@ -84,6 +85,8 @@ namespace PhantiCheat {
 
     void AntiCheatManager::shutdown()
     {
+        m_inputTracker.shutdown();
+
         if (m_running.load())
         {
             m_running.store(false);
@@ -117,6 +120,11 @@ namespace PhantiCheat {
     bool AntiCheatManager::isDriverConnected() const
     {
         return m_driverConnected.load();
+    }
+
+    bool AntiCheatManager::initializeInputTracking(HWND hwnd)
+    {
+        return m_inputTracker.initialize(hwnd);
     }
 
     void AntiCheatManager::workerThread()
@@ -158,6 +166,27 @@ namespace PhantiCheat {
                         CloseHandle(m_driverHandle);
                         m_driverHandle = INVALID_HANDLE_VALUE;
                     }
+                }
+            }
+
+            // Poll input tracker for anomalies (runs regardless of driver state)
+            if (m_inputTracker.isActive())
+            {
+                AC_INPUT_ANOMALY_DATA anomaly;
+                if (m_inputTracker.snapshot(&anomaly))
+                {
+                    // Package as a single-entry telemetry response
+                    AC_TELEMETRY_RESPONSE inputResponse;
+                    memset(&inputResponse, 0, sizeof(inputResponse));
+                    inputResponse.EntryCount = 1;
+                    inputResponse.Entries[0].Type = AC_TELEMETRY_INPUT_ANOMALY;
+                    inputResponse.Entries[0].DataLength = sizeof(AC_INPUT_ANOMALY_DATA);
+                    memcpy(inputResponse.Entries[0].Data, &anomaly, sizeof(anomaly));
+
+                    std::lock_guard<std::mutex> lock(m_mutex);
+                    while (m_telemetryQueue.size() >= AC_MAX_QUEUE_SIZE)
+                        m_telemetryQueue.pop();
+                    m_telemetryQueue.push(inputResponse);
                 }
             }
 
