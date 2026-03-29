@@ -9,107 +9,50 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Windows 32-bit  -  Client (Release) + Server (Standalone), includes anticheat
+  # Linux  -  Server (Standalone) build
   # ---------------------------------------------------------------------------
-  windows:
-    name: Windows (MSVC)
-    runs-on: windows-latest
+  linux-server:
+    name: Linux Server
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build client (Release)
-        run: msbuild source\vcpp\assaultcube.sln /p:Configuration=Release /p:Platform=Win32 /m
-
-      - name: Build server (Standalone)
-        run: msbuild source\vcpp\assaultcube.sln /p:Configuration=Standalone /p:Platform=Win32 /m
-
-      - name: Verify binaries
-        shell: bash
+      - name: Install build dependencies
         run: |
-          test -f bin_win32/ac_client.exe && echo "Client OK" || exit 1
-          test -f bin_win32/ac_server.exe && echo "Server OK" || exit 1
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            make \
+            automake \
+            autoconf \
+            libtool \
+            zlib1g-dev
 
-      - name: Upload Windows client
+      - name: Build server
+        working-directory: source/src
+        run: |
+          make clean
+          make server
+          make server_install
+
+      - name: Verify binary
+        run: |
+          test -f bin_unix/native_server && echo "Server OK" || exit 1
+
+      - name: Upload Linux server
         uses: actions/upload-artifact@v4
         with:
-          name: windows-client
-          path: bin_win32/ac_client.exe
-
-      - name: Upload Windows server
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-server
-          path: bin_win32/ac_server.exe
+          name: linux-server
+          path: bin_unix/native_server
 
   # ---------------------------------------------------------------------------
-  # Windows kernel-mode driver (WDM) - PhantiCheat anti-cheat driver
-  # ---------------------------------------------------------------------------
-  kernel-driver:
-    name: Kernel Driver (WDK)
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Install Windows Driver Kit
-        shell: pwsh
-        run: |
-          $ProgressPreference = 'SilentlyContinue'
-
-          # Download the WDK 10 online installer (stable Microsoft redirect).
-          Write-Host 'Downloading WDK installer...'
-          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/?linkid=2272234' `
-            -OutFile "$env:TEMP\wdksetup.exe"
-
-          # Install WDK silently (includes headers, libs and MSBuild targets).
-          Write-Host 'Installing WDK (this may take a few minutes)...'
-          $proc = Start-Process -Wait -PassThru "$env:TEMP\wdksetup.exe" `
-            -ArgumentList '/features','+','/quiet','/norestart','/ceip','off'
-          if ($proc.ExitCode -ne 0) {
-            Write-Error "WDK installation failed (exit code $($proc.ExitCode))"
-            exit 1
-          }
-
-          # Expose the WDK root so MSBuild can locate the toolset & headers.
-          $kitsRoot = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots').KitsRoot10
-          if (-not $kitsRoot) {
-            Write-Error 'WDK registry key not found after installation'
-            exit 1
-          }
-          Write-Host "WDK installed at: $kitsRoot"
-          echo "WDKContentRoot=$kitsRoot" >> $env:GITHUB_ENV
-
-      - name: Build kernel driver (Release)
-        run: >
-          msbuild source\src\anticheat\driver\phanticheat.vcxproj
-          /p:Configuration=Release
-          /p:Platform=x64
-          /m
-
-      - name: Verify driver binary
-        shell: bash
-        run: |
-          test -f "bin_win32/driver/Release/phanticheat.sys" && echo "Driver OK (Release)" || exit 1
-
-      - name: Upload driver artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-driver-Release
-          path: bin_win32/driver/Release/phanticheat.sys
-
-  # ---------------------------------------------------------------------------
-  # Release – create a GitHub Release with all build artifacts (push only)
+  # Release – create a GitHub Release with build artifacts (push only)
   # Deletes all previous releases so only the latest build is available.
   # ---------------------------------------------------------------------------
   release:
     name: Publish Release
     if: github.event_name == 'push'
-    needs: [windows, kernel-driver]
+    needs: [linux-server]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -139,9 +82,7 @@ jobs:
             --title "Latest Build ($(date -u +%Y-%m-%d))" \
             --notes "Automated build from commit ${{ github.sha }}" \
             --latest \
-            artifacts/windows-client/ac_client.exe \
-            artifacts/windows-server/ac_server.exe \
-            artifacts/kernel-driver-Release/phanticheat.sys
+            artifacts/linux-server/native_server
 
   # ---------------------------------------------------------------------------
   # Notify – post a build summary (runs on success or failure)
@@ -149,13 +90,12 @@ jobs:
   notify:
     name: Build Summary
     if: always() && github.event_name == 'push'
-    needs: [windows, kernel-driver, release]
+    needs: [linux-server, release]
     runs-on: ubuntu-latest
     steps:
       - name: Build notification
         run: |
-          if [ "${{ needs.windows.result }}" = "success" ] && \
-             [ "${{ needs.kernel-driver.result }}" = "success" ] && \
+          if [ "${{ needs.linux-server.result }}" = "success" ] && \
              [ "${{ needs.release.result }}" = "success" ]; then
             echo "## :white_check_mark: Build Succeeded" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -166,7 +106,6 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Windows (MSVC) | ${{ needs.windows.result }} |" >> "$GITHUB_STEP_SUMMARY"
-            echo "| Kernel Driver | ${{ needs.kernel-driver.result }} |" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Linux Server | ${{ needs.linux-server.result }} |" >> "$GITHUB_STEP_SUMMARY"
             echo "| Release | ${{ needs.release.result }} |" >> "$GITHUB_STEP_SUMMARY"
           fi
