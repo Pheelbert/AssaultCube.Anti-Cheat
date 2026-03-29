@@ -7,4 +7,20 @@ services:
     volumes:
       - ./config:/ac/config
       - ./logs:/ac/logs
+      - dashboard-data:/ac/data
     restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "8080:8080"
+    volumes:
+      - dashboard-data:/data:ro
+    environment:
+      - AC_STATUS_FILE=/data/dashboard_status.json
+    depends_on:
+      - acserver
+    restart: unless-stopped
+
+volumes:
+  dashboard-data:
