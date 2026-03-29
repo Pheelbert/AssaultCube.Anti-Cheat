@@ -127,6 +127,21 @@ namespace PhantiCheat {
         return m_inputTracker.initialize(hwnd);
     }
 
+    void AntiCheatManager::setInputDebugConfig(const AC_INPUT_DEBUG_CONFIG &cfg)
+    {
+        m_inputTracker.setDebugConfig(cfg);
+    }
+
+    void AntiCheatManager::clearInputDebugConfig()
+    {
+        m_inputTracker.clearDebugConfig();
+    }
+
+    bool AntiCheatManager::isInputDebugActive() const
+    {
+        return m_inputTracker.isDebugActive();
+    }
+
     void AntiCheatManager::workerThread()
     {
         while (m_running.load())
@@ -168,6 +183,12 @@ namespace PhantiCheat {
                     }
                 }
             }
+
+            // Poll kernel key state before taking the snapshot.
+            // This samples GetAsyncKeyState for all VKs so the snapshot
+            // has fresh transition counts from the kernel layer.
+            if (m_inputTracker.isActive())
+                m_inputTracker.pollKeyState();
 
             // Poll input tracker for anomalies (runs regardless of driver state)
             if (m_inputTracker.isActive())

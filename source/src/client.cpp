@@ -45,6 +45,125 @@ PhantiCheat::InputTracker *getinputtracker()
         return g_antiCheatManager->getInputTracker();
     return NULL;
 }
+
+// Debug: simulate input hook anomalies.
+// scenario selects a preset configuration that makes different hook layers
+// report different data, exercising the cross-layer detection logic.
+//
+//   0 = off (clear debug config)
+//   1 = "SendInput ghost"   - SDL sees extra keys not in Raw Input or kernel state
+//   2 = "Driver injection"  - Raw Input has events but kernel state disagrees
+//   3 = "Full injection"    - LL hooks report injected, SDL inflated, no kernel backing
+//   4 = "Input suppression" - Kernel state changes but SDL sees nothing
+//   5 = "Custom" with raw values (called from console with explicit params)
+//
+void debuginputanomaly(int *pscenario)
+{
+    if (!g_antiCheatManager)
+    {
+        conoutf("anti-cheat not initialized");
+        return;
+    }
+
+    int scenario = *pscenario;
+    AC_INPUT_DEBUG_CONFIG cfg;
+    memset(&cfg, 0, sizeof(cfg));
+
+    switch (scenario)
+    {
+    case 0: // Off
+        g_antiCheatManager->clearInputDebugConfig();
+        conoutf("[AC Debug] Input anomaly simulation OFF");
+        return;
+
+    case 1: // SendInput ghost: SDL gets extra keys, raw input and kernel see nothing extra
+        cfg.Active = 1;
+        cfg.SimulatedSdlKeys   = 15;
+        cfg.SimulatedSdlMouse  = 8;
+        cfg.SimulatedRawKeys   = 0;
+        cfg.SimulatedRawMouse  = 0;
+        cfg.SimulatedKeyStateKeys = 0;
+        cfg.SimulatedInjectedKeys = 0;
+        cfg.SimulatedInjectedMouse = 0;
+        cfg.ForceAnomalyFlags  = 0;
+        conoutf("[AC Debug] Scenario 1: SendInput ghost (SDL+15k, +8m vs silent raw/kernel)");
+        break;
+
+    case 2: // Driver injection: raw input inflated but kernel state doesn't agree
+        cfg.Active = 1;
+        cfg.SimulatedSdlKeys   = 10;
+        cfg.SimulatedSdlMouse  = 5;
+        cfg.SimulatedRawKeys   = 10;
+        cfg.SimulatedRawMouse  = 5;
+        cfg.SimulatedKeyStateKeys = 0;  // kernel doesn't see them
+        cfg.SimulatedInjectedKeys = 0;
+        cfg.SimulatedInjectedMouse = 0;
+        cfg.ForceAnomalyFlags  = 0;
+        conoutf("[AC Debug] Scenario 2: Driver injection (raw+SDL inflated, kernel silent)");
+        break;
+
+    case 3: // Full injection: LL hooks tag injected, SDL inflated, no kernel backing
+        cfg.Active = 1;
+        cfg.SimulatedSdlKeys   = 20;
+        cfg.SimulatedSdlMouse  = 12;
+        cfg.SimulatedRawKeys   = 5;
+        cfg.SimulatedRawMouse  = 3;
+        cfg.SimulatedKeyStateKeys = 0;
+        cfg.SimulatedInjectedKeys = 20;
+        cfg.SimulatedInjectedMouse = 12;
+        cfg.ForceAnomalyFlags  = 0;
+        conoutf("[AC Debug] Scenario 3: Full injection (LL injected + SDL inflated + no kernel)");
+        break;
+
+    case 4: // Input suppression: kernel state changes but SDL sees nothing
+        cfg.Active = 1;
+        cfg.SimulatedSdlKeys   = 0;
+        cfg.SimulatedSdlMouse  = 0;
+        cfg.SimulatedRawKeys   = 0;
+        cfg.SimulatedRawMouse  = 0;
+        cfg.SimulatedKeyStateKeys = 10;
+        cfg.SimulatedInjectedKeys = 0;
+        cfg.SimulatedInjectedMouse = 0;
+        cfg.ForceAnomalyFlags  = 0;
+        conoutf("[AC Debug] Scenario 4: Input suppression (kernel +10 keys, SDL silent)");
+        break;
+
+    default:
+        conoutf("[AC Debug] Unknown scenario %d (use 0-4)", scenario);
+        return;
+    }
+
+    g_antiCheatManager->setInputDebugConfig(cfg);
+}
+COMMANDN(acdebug, debuginputanomaly, "i");
+
+// Custom debug config: acdebugcustom sdlK sdlM rawK rawM ksK injK injM flags
+void debuginputanomalycustom(int *sdlK, int *sdlM, int *rawK, int *rawM,
+                              int *ksK, int *injK, int *injM, int *flags)
+{
+    if (!g_antiCheatManager)
+    {
+        conoutf("anti-cheat not initialized");
+        return;
+    }
+
+    AC_INPUT_DEBUG_CONFIG cfg;
+    cfg.Active = 1;
+    cfg.SimulatedSdlKeys      = (ULONG)*sdlK;
+    cfg.SimulatedSdlMouse     = (ULONG)*sdlM;
+    cfg.SimulatedRawKeys      = (ULONG)*rawK;
+    cfg.SimulatedRawMouse     = (ULONG)*rawM;
+    cfg.SimulatedKeyStateKeys = (ULONG)*ksK;
+    cfg.SimulatedInjectedKeys = (ULONG)*injK;
+    cfg.SimulatedInjectedMouse = (ULONG)*injM;
+    cfg.ForceAnomalyFlags     = (ULONG)*flags;
+
+    g_antiCheatManager->setInputDebugConfig(cfg);
+    conoutf("[AC Debug] Custom config: sdl(%d,%d) raw(%d,%d) ks(%d) inj(%d,%d) flags=0x%x",
+            *sdlK, *sdlM, *rawK, *rawM, *ksK, *injK, *injM, *flags);
+}
+COMMANDN(acdebugcustom, debuginputanomalycustom, "iiiiiiii");
+
 #else
 void initanticheat() {}
 void shutdownanticheat() {}

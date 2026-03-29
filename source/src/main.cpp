@@ -1070,6 +1070,11 @@ void checkinput()
         mousemove(tdx, tdy);
     }
     if (focused) { if (grabinput != (focused > 0)) inputgrab(grabinput = focused > 0, shouldgrab); focused = 0; }
+
+    // Poll kernel key-state table every frame for transition detection
+    #ifdef WIN32
+    { extern PhantiCheat::InputTracker *getinputtracker(); PhantiCheat::InputTracker *t = getinputtracker(); if(t) t->pollKeyState(); }
+    #endif
 }
 
 VARF(gamespeed, 10, 100, 1000, if(multiplayer()) gamespeed = 100);
