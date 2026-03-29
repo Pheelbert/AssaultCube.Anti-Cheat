@@ -400,6 +400,10 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\anticheat\ac_shared.h" />
+    <ClInclude Include="..\src\anticheat\ac_telemetry_types.h" />
+    <ClInclude Include="..\src\anticheat\AntiCheatManager.h" />
+    <ClInclude Include="..\src\anticheat\InputTracker.h" />
     <ClInclude Include="..\src\command.h" />
     <ClInclude Include="..\src\console.h" />
     <ClInclude Include="..\src\crypto_tools.h" />
@@ -508,6 +512,12 @@
     <None Include="..\..\config\sounds.cfg" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\anticheat\AntiCheatManager.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\src\anticheat\InputTracker.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\src\FileIntegrityChecker.cpp" />
     <ClCompile Include="..\src\FileUtil.cpp" />
     <ClCompile Include="..\src\HashUtil.cpp" />

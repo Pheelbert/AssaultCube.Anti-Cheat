@@ -14,6 +14,7 @@
 #define AC_TELEMETRY_NONE             0
 #define AC_TELEMETRY_WINDOWS_VERSION  1
 #define AC_TELEMETRY_HEARTBEAT        2
+#define AC_TELEMETRY_INPUT_ANOMALY    3
 
 #define AC_MAX_TELEMETRY_DATA         256
 
@@ -33,6 +34,19 @@ typedef struct {
     uint32_t UptimeSeconds;
     uint32_t ScanCount;
 } AcHeartbeatData;
+
+// Input anomaly telemetry payload
+typedef struct {
+    uint32_t TimestampMs;
+    uint32_t InjectedKeyCount;
+    uint32_t InjectedMouseCount;
+    uint32_t SyntheticKeyCount;
+    uint32_t SyntheticMouseCount;
+    uint32_t RawKeyboardEvents;
+    uint32_t RawMouseEvents;
+    uint32_t SdlKeyEvents;
+    uint32_t SdlMouseEvents;
+} AcInputAnomalyData;
 
 #pragma pack(pop)
 

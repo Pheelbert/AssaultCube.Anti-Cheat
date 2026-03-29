@@ -9,6 +9,7 @@
 #include <queue>
 #include <atomic>
 #include "ac_shared.h"
+#include "InputTracker.h"
 
 namespace PhantiCheat {
 
@@ -35,6 +36,13 @@ namespace PhantiCheat {
         // Whether the kernel driver is connected.
         bool isDriverConnected() const;
 
+        // Input tracking: call after the game window is created.
+        // hwnd is the game's main SDL window handle.
+        bool initializeInputTracking(HWND hwnd);
+
+        // Accessor so the SDL event loop can record events.
+        InputTracker* getInputTracker() { return &m_inputTracker; }
+
     private:
         void workerThread();
 
@@ -45,6 +53,8 @@ namespace PhantiCheat {
 
         mutable std::mutex m_mutex;
         std::queue<AC_TELEMETRY_RESPONSE> m_telemetryQueue;
+
+        InputTracker m_inputTracker;
 
         // Prevent copying
         AntiCheatManager(const AntiCheatManager&) = delete;

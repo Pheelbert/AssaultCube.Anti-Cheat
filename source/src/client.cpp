@@ -32,6 +32,19 @@ void shutdownanticheat()
         g_antiCheatManager = NULL;
     }
 }
+bool initanticheatinput(HWND hwnd)
+{
+    if (g_antiCheatManager)
+        return g_antiCheatManager->initializeInputTracking(hwnd);
+    return false;
+}
+
+PhantiCheat::InputTracker *getinputtracker()
+{
+    if (g_antiCheatManager)
+        return g_antiCheatManager->getInputTracker();
+    return NULL;
+}
 #else
 void initanticheat() {}
 void shutdownanticheat() {}
