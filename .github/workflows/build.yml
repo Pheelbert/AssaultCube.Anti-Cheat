@@ -50,9 +50,6 @@ jobs:
   kernel-driver:
     name: Kernel Driver (WDK)
     runs-on: windows-latest
-    strategy:
-      matrix:
-        configuration: [Debug, Release]
     steps:
       - uses: actions/checkout@v4
 
@@ -62,24 +59,23 @@ jobs:
       - name: Install Windows Driver Kit
         uses: microsoft/setup-wdk@v1
 
-      - name: Build kernel driver (${{ matrix.configuration }})
+      - name: Build kernel driver (Release)
         run: >
           msbuild source\src\anticheat\driver\phanticheat.vcxproj
-          /p:Configuration=${{ matrix.configuration }}
+          /p:Configuration=Release
           /p:Platform=x64
           /m
 
       - name: Verify driver binary
         shell: bash
         run: |
-          DRIVER_PATH="bin_win32/driver/${{ matrix.configuration }}/phanticheat.sys"
-          test -f "$DRIVER_PATH" && echo "Driver OK (${{ matrix.configuration }})" || exit 1
+          test -f "bin_win32/driver/Release/phanticheat.sys" && echo "Driver OK (Release)" || exit 1
 
       - name: Upload driver artifact
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-driver-${{ matrix.configuration }}
-          path: bin_win32/driver/${{ matrix.configuration }}/phanticheat.sys
+          name: kernel-driver-Release
+          path: bin_win32/driver/Release/phanticheat.sys
 
   # ---------------------------------------------------------------------------
   # Release – create a GitHub Release with all build artifacts (push only)
@@ -120,8 +116,7 @@ jobs:
             --latest \
             artifacts/windows-client/ac_client.exe \
             artifacts/windows-server/ac_server.exe \
-            artifacts/kernel-driver-Debug/phanticheat.sys#phanticheat-debug.sys \
-            artifacts/kernel-driver-Release/phanticheat.sys#phanticheat-release.sys
+            artifacts/kernel-driver-Release/phanticheat.sys
 
   # ---------------------------------------------------------------------------
   # Notify – post a build summary (runs on success or failure)
