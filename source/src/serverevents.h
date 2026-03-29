@@ -43,6 +43,8 @@ void processevent(client *c, shotevent &e)
        gs.mag[e.gun]<=0)
         return;
 
+    PostProcess::recordGameEvent(c->ppState, GE_SHOT);
+
     if(e.gun == GUN_AKIMBO && gs.akimbomillis < sg->gamemillis) return;
     if(e.gun!=GUN_KNIFE) gs.mag[e.gun]--;
     loopi(NUMGUNS) if(gs.gunwait[i]) gs.gunwait[i] = max(gs.gunwait[i] - (e.millis-gs.lastshot), 0);
@@ -102,6 +104,7 @@ void processevent(client *c, shotevent &e)
 
                 if(totalrays>maxrays) continue;
                 c->session_hits++;
+                PostProcess::recordHit(c->ppState);
                 serverdamage(target, c, damage, e.gun, gib, h.dir);
             }
             break;
@@ -111,6 +114,7 @@ void processevent(client *c, shotevent &e)
 
 void processevent(client *c, suicideevent &e)
 {
+    PostProcess::recordGameEvent(c->ppState, GE_SUICIDE);
     serverdamage(c, c, INT_MAX, GUN_KNIFE, false);
 }
 
@@ -129,6 +133,8 @@ void processevent(client *c, reloadevent &e)
        !reloadable_gun(e.gun) ||
        gs.ammo[e.gun]<=0)
         return;
+
+    PostProcess::recordGameEvent(c->ppState, GE_RELOAD);
 
     if(e.gun == GUN_AKIMBO && gs.akimbomillis < sg->gamemillis) return;
     bool akimbo = e.gun==GUN_PISTOL && gs.akimbomillis>e.millis;
@@ -153,6 +159,7 @@ void processevent(client *c, akimboevent &e)
 {
     clientstate &gs = c->state;
     if(!gs.isalive(sg->gamemillis) || gs.akimbomillis) return;
+    PostProcess::recordGameEvent(c->ppState, GE_AKIMBO);
     gs.akimbomillis = e.millis+30000;
 }
 

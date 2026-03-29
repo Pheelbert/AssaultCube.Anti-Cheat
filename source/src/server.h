@@ -1,5 +1,7 @@
 // server.h
 
+#include "anticheat/PostProcessAnalyzer.h"
+
 #define gamemode sg->smode   // allows the gamemode macros to work with the server mode
 
 #define SERVER_PROTOCOL_VERSION    (PROTOCOL_VERSION)    // server without any gameplay modification
@@ -287,6 +289,9 @@ struct client                   // server side version of "dynent" type
     // Session-cumulative stats (not reset between rounds)
     int session_frags, session_deaths, session_shotcount, session_hits;
 
+    // Post-process anomaly detection state
+    PostProcessState ppState;
+
     gameevent &addevent()
     {
         static gameevent dummy;
@@ -347,6 +352,7 @@ struct client                   // server side version of "dynent" type
         hasKernelAC = false;
         windowsMajor = windowsMinor = windowsBuild = 0;
         acDriverVersion = acUptimeSeconds = acScanCount = acHeartbeatCount = 0;
+        ppState.reset();
         session_frags = session_deaths = session_shotcount = session_hits = 0;
     }
 
