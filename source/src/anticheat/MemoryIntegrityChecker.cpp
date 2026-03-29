@@ -1,4 +1,4 @@
-#include "../cube.h"
+#include "cube.h"
 
 #include "MemoryIntegrityChecker.h"
 #include "HashUtil.h"

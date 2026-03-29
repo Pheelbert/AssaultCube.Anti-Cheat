@@ -1,4 +1,4 @@
-#include "../cube.h"
+#include "cube.h"
 #include "HashUtil.h"
 #include <fstream>
 #include <sstream>
