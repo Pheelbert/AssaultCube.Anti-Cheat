@@ -9,6 +9,32 @@ on:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Windows  -  Client (Release) build
+  # ---------------------------------------------------------------------------
+  windows-client:
+    name: Windows Client
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build client (Release|Win32)
+        run: msbuild source\vcpp\assaultcube.sln /p:Configuration=Release /p:Platform=Win32 /verbosity:minimal
+
+      - name: Verify binary
+        shell: bash
+        run: |
+          test -f bin_win32/ac_client.exe && echo "Client OK" || exit 1
+
+      - name: Upload Windows client
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-client
+          path: bin_win32/ac_client.exe
+
+  # ---------------------------------------------------------------------------
   # Linux  -  Server (Standalone) build
   # ---------------------------------------------------------------------------
   linux-server:
@@ -52,7 +78,7 @@ jobs:
   release:
     name: Publish Release
     if: github.event_name == 'push'
-    needs: [linux-server]
+    needs: [windows-client, linux-server]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -82,6 +108,7 @@ jobs:
             --title "Latest Build ($(date -u +%Y-%m-%d))" \
             --notes "Automated build from commit ${{ github.sha }}" \
             --latest \
+            artifacts/windows-client/ac_client.exe \
             artifacts/linux-server/native_server
 
   # ---------------------------------------------------------------------------
@@ -90,12 +117,13 @@ jobs:
   notify:
     name: Build Summary
     if: always() && github.event_name == 'push'
-    needs: [linux-server, release]
+    needs: [windows-client, linux-server, release]
     runs-on: ubuntu-latest
     steps:
       - name: Build notification
         run: |
-          if [ "${{ needs.linux-server.result }}" = "success" ] && \
+          if [ "${{ needs.windows-client.result }}" = "success" ] && \
+             [ "${{ needs.linux-server.result }}" = "success" ] && \
              [ "${{ needs.release.result }}" = "success" ]; then
             echo "## :white_check_mark: Build Succeeded" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -106,6 +134,7 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "| Job | Status |" >> "$GITHUB_STEP_SUMMARY"
             echo "|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+            echo "| Windows Client | ${{ needs.windows-client.result }} |" >> "$GITHUB_STEP_SUMMARY"
             echo "| Linux Server | ${{ needs.linux-server.result }} |" >> "$GITHUB_STEP_SUMMARY"
             echo "| Release | ${{ needs.release.result }} |" >> "$GITHUB_STEP_SUMMARY"
           fi
