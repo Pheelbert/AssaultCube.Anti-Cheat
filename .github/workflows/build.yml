@@ -1,0 +1,91 @@
+name: Build AssaultCube
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Linux 64-bit  -  Client + Server (clang++)
+  # ---------------------------------------------------------------------------
+  linux64:
+    name: Linux 64-bit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            libsdl2-dev \
+            libsdl2-image-dev \
+            zlib1g-dev \
+            libogg-dev \
+            libvorbis-dev \
+            libopenal-dev \
+            libcurl4-openssl-dev
+
+      - name: Build client and server
+        working-directory: source/src
+        run: |
+          make clean
+          make -j$(nproc)
+          make install
+
+      - name: Verify binaries
+        run: |
+          test -f bin_unix/native_client && echo "Client OK" || exit 1
+          test -f bin_unix/native_server && echo "Server OK" || exit 1
+
+      - name: Upload Linux client
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux64-client
+          path: bin_unix/native_client
+
+      - name: Upload Linux server
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux64-server
+          path: bin_unix/native_server
+
+  # ---------------------------------------------------------------------------
+  # Windows 32-bit  -  Client (Release) + Server (Standalone), includes anticheat
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build client (Release)
+        run: msbuild source\vcpp\assaultcube.sln /p:Configuration=Release /p:Platform=Win32 /m
+
+      - name: Build server (Standalone)
+        run: msbuild source\vcpp\assaultcube.sln /p:Configuration=Standalone /p:Platform=Win32 /m
+
+      - name: Verify binaries
+        shell: bash
+        run: |
+          test -f bin_win32/ac_client.exe && echo "Client OK" || exit 1
+          test -f bin_win32/ac_server.exe && echo "Server OK" || exit 1
+
+      - name: Upload Windows client
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-client
+          path: bin_win32/ac_client.exe
+
+      - name: Upload Windows server
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-server
+          path: bin_win32/ac_server.exe
