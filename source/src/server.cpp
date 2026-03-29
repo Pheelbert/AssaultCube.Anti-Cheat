@@ -1924,6 +1924,7 @@ void serverdamage(client *target, client *actor, int damage, int gun, bool gib, 
         bool tk = false, suic = false;
         target->state.deaths++;
         target->session_deaths++;
+        PostProcess::recordDeath(target->ppState);
         target->incrementvitacounter(VS_DEATHS, 1);
 
         if(target!=actor)
@@ -1932,6 +1933,7 @@ void serverdamage(client *target, client *actor, int damage, int gun, bool gib, 
             {
                 actor->state.frags += gib && gun != GUN_GRENADE && gun != GUN_SHOTGUN ? 2 : 1;
                 actor->session_frags++;
+                PostProcess::recordFrag(actor->ppState);
                 actor->incrementvitacounter(VS_FRAGS, 1);
             }
             else
@@ -1994,6 +1996,7 @@ void serverdamage(client *target, client *actor, int damage, int gun, bool gib, 
 }
 
 #include "serverevents.h"
+#include "anticheat/PostProcessAnalyzer.cpp"
 
 bool updatedescallowed(void) { return scl.servdesc_pre[0] || scl.servdesc_suf[0]; }
 
@@ -3447,6 +3450,23 @@ void process(ENetPacket *packet, int sender, int chan)
                         }
                         break;
                     }
+                    case AC_TELEMETRY_INPUT_ANOMALY:
+                    {
+                        if (dataLength >= (int)sizeof(AcInputAnomalyData))
+                        {
+                            const AcInputAnomalyData *ia = (const AcInputAnomalyData *)&rawData[0];
+                            PostProcess::recordInputTelemetry(cl->ppState, ia);
+                            if (ia->AnomalyFlags != AC_ANOMALY_NONE)
+                            {
+                                mlog(ACLOG_INFO, "[%s] %s input anomaly: flags=0x%x sdlK=%u sdlM=%u rawK=%u rawM=%u",
+                                     cl->hostname, cl->name,
+                                     ia->AnomalyFlags,
+                                     ia->SdlKeyEvents, ia->SdlMouseEvents,
+                                     ia->RawKeyboardEvents, ia->RawMouseEvents);
+                            }
+                        }
+                        break;
+                    }
                     default:
                         mlog(ACLOG_VERBOSE, "[%s] %s sent unknown telemetry type %d (%d bytes)",
                              cl->hostname, cl->name, telemetryType, dataLength);
@@ -4743,6 +4763,39 @@ void serverslice(uint timeout)   // main server update, called from cube main lo
     if(sg->minremain > 0 && !sg->sispaused)
     {
         processevents();
+
+        // Post-process anomaly detection: evaluate each client's window
+        loopv(clients)
+        {
+            client *c = clients[i];
+            if(c->type == ST_EMPTY) continue;
+            // Initialize window on first tick
+            if(c->ppState.windowStartMillis == 0)
+            {
+                c->ppState.startWindow(sg->gamemillis);
+            }
+            // Evaluate when the window has elapsed
+            else if(sg->gamemillis - c->ppState.windowStartMillis >= PP_WINDOW_MILLIS)
+            {
+                PPEvalResult ppResult;
+                if(PostProcess::evaluate(c->ppState, ppResult))
+                {
+                    c->ppState.lifetimeFlags |= ppResult.anomalyFlags;
+                    const char *sevStr = ppResult.maxSeverity == PP_SEV_HIGH ? "HIGH" :
+                                         ppResult.maxSeverity == PP_SEV_SUSPECT ? "SUSPECT" : "INFO";
+                    mlog(ACLOG_INFO, "[%s] %s post-process anomaly [%s]: flags=0x%x (%d rules, window %d)",
+                         c->hostname, c->name, sevStr,
+                         ppResult.anomalyFlags, ppResult.ruleCount, c->ppState.evalCount);
+                    for(int r = 0; r < ppResult.ruleCount; r++)
+                    {
+                        mlog(ACLOG_VERBOSE, "  rule: %s", ppResult.rules[r].description);
+                    }
+                }
+                c->ppState.evalCount++;
+                c->ppState.startWindow(sg->gamemillis);
+            }
+        }
+
         checkitemspawns(diff);
         bool ktfflagingame = false;
         if(m_flags_) loopi(2)
