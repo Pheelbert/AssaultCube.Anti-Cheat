@@ -56,8 +56,20 @@ jobs:
       - name: Add MSBuild to PATH
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Windows Driver Kit
-        uses: microsoft/setup-wdk@v1
+      - name: Find Windows Driver Kit
+        id: find-wdk
+        shell: pwsh
+        run: |
+          # WDK is pre-installed on windows-latest runners.
+          # Locate the latest WDK installation and expose it to MSBuild.
+          $wdkRoot = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows Kits\Installed Roots' -Name 'KitsRoot10' |
+                     Select-Object -ExpandProperty KitsRoot10
+          if (-not $wdkRoot) {
+            Write-Error "WDK not found on this runner"
+            exit 1
+          }
+          Write-Host "WDK root: $wdkRoot"
+          echo "WDK_ROOT=$wdkRoot" >> $env:GITHUB_ENV
 
       - name: Build kernel driver (Release)
         run: >
