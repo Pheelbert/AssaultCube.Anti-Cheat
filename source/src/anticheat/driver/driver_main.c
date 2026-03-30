@@ -14,6 +14,7 @@
 #include <ntddk.h>
 #include "../ac_shared.h"
 #include "scan_engine.h"
+#include "modules/input_monitor.h"
 
 // Track driver load time for uptime calculation (non-static: referenced by heartbeat module)
 LARGE_INTEGER g_DriverLoadTime;
@@ -22,7 +23,16 @@ LARGE_INTEGER g_DriverLoadTime;
 static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchClose(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+static NTSTATUS AcDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+static NTSTATUS AcDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static void AcDriverUnload(PDRIVER_OBJECT DriverObject);
+
+// Helper: check if this device object is one of our input filter devices
+static BOOLEAN AcIsFilterDevice(PDEVICE_OBJECT DeviceObject)
+{
+    return (DeviceObject == g_KeyboardFilterDevice ||
+            DeviceObject == g_MouseFilterDevice);
+}
 
 // Helper: get uptime in seconds since driver load
 static ULONG AcGetUptimeSeconds(void)
@@ -81,6 +91,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     DriverObject->MajorFunction[IRP_MJ_CREATE] = AcDispatchCreate;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = AcDispatchClose;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AcDispatchDeviceControl;
+    DriverObject->MajorFunction[IRP_MJ_READ] = AcDispatchRead;
+    // Internal device control is used by class drivers for keyboard/mouse data
+    DriverObject->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = AcDispatchPassthrough;
     DriverObject->DriverUnload = AcDriverUnload;
 
     // Initialize scan engine (registers built-in modules)
@@ -89,6 +102,14 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
     {
         DbgPrint("[PhantiCheat] Scan engine init failed: 0x%08X\n", status);
         // Non-fatal: driver still loads, just no modules
+    }
+
+    // Attach input monitor filters to keyboard/mouse device stacks
+    status = AcInputMonitorAttach(DriverObject);
+    if (!NT_SUCCESS(status))
+    {
+        DbgPrint("[PhantiCheat] Input monitor attach failed: 0x%08X\n", status);
+        // Non-fatal: driver still works, just no kernel-level input monitoring
     }
 
     DbgPrint("[PhantiCheat] Driver loaded successfully.\n");
@@ -104,6 +125,9 @@ static void AcDriverUnload(PDRIVER_OBJECT DriverObject)
 
     DbgPrint("[PhantiCheat] Driver unloading.\n");
 
+    // Detach input monitor filters before deleting our control device
+    AcInputMonitorDetach();
+
     RtlInitUnicodeString(&symlinkName, AC_SYMLINK_NAME);
     IoDeleteSymbolicLink(&symlinkName);
 
@@ -116,11 +140,42 @@ static void AcDriverUnload(PDRIVER_OBJECT DriverObject)
 }
 
 // ---------------------------------------------------------------------------
+// IRP_MJ_READ - route to input monitor for filter devices, reject for control
+// ---------------------------------------------------------------------------
+static NTSTATUS AcDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    if (AcIsFilterDevice(DeviceObject))
+        return AcInputMonitorDispatchRead(DeviceObject, Irp);
+
+    // Our control device doesn't support reads
+    Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_INVALID_DEVICE_REQUEST;
+}
+
+// ---------------------------------------------------------------------------
+// Passthrough for IRPs on filter devices (INTERNAL_DEVICE_CONTROL etc.)
+// ---------------------------------------------------------------------------
+static NTSTATUS AcDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    if (AcIsFilterDevice(DeviceObject))
+        return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
+
+    Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_INVALID_DEVICE_REQUEST;
+}
+
+// ---------------------------------------------------------------------------
 // IRP_MJ_CREATE - called when user-mode opens the device handle
 // ---------------------------------------------------------------------------
 static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
+    // If this is a filter device, pass through
+    if (AcIsFilterDevice(DeviceObject))
+        return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
 
     DbgPrint("[PhantiCheat] Device opened.\n");
 
@@ -135,7 +190,8 @@ static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 // ---------------------------------------------------------------------------
 static NTSTATUS AcDispatchClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-    UNREFERENCED_PARAMETER(DeviceObject);
+    if (AcIsFilterDevice(DeviceObject))
+        return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
 
     DbgPrint("[PhantiCheat] Device closed.\n");
 
@@ -157,7 +213,9 @@ static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     NTSTATUS status = STATUS_SUCCESS;
     ULONG bytesWritten = 0;
 
-    UNREFERENCED_PARAMETER(DeviceObject);
+    // Filter devices don't handle our IOCTLs - pass through
+    if (AcIsFilterDevice(DeviceObject))
+        return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
 
     irpSp = IoGetCurrentIrpStackLocation(Irp);
     ioControlCode = irpSp->Parameters.DeviceIoControl.IoControlCode;

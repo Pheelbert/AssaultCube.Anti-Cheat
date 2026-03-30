@@ -37,5 +37,6 @@ ULONG AcScanEngineGetScanCount(void);
 // Built-in module registration functions (called by AcScanEngineInit)
 NTSTATUS AcRegisterWindowsVersionModule(void);
 NTSTATUS AcRegisterHeartbeatModule(void);
+NTSTATUS AcRegisterInputMonitorModule(void);
 
 #endif // SCAN_ENGINE_H

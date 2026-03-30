@@ -66,11 +66,13 @@ namespace PhantiCheat {
         , m_keyboardHook(NULL)
         , m_mouseHook(NULL)
         , m_active(false)
+        , m_hasKernelData(false)
     {
         m_counters.reset();
         m_debugConfig.reset();
         memset(m_prevKeyState, 0, sizeof(m_prevKeyState));
         memset(m_prevMouseState, 0, sizeof(m_prevMouseState));
+        memset(&m_kernelData, 0, sizeof(m_kernelData));
     }
 
     InputTracker::~InputTracker()
@@ -332,6 +334,17 @@ namespace PhantiCheat {
     }
 
     // ---------------------------------------------------------------------------
+    // feedKernelInputData - receive Layer 0 data from kernel driver
+    // ---------------------------------------------------------------------------
+
+    void InputTracker::feedKernelInputData(const AC_KERNEL_INPUT_DATA &data)
+    {
+        std::lock_guard<std::mutex> lock(m_kernelDataMutex);
+        m_kernelData = data;
+        m_hasKernelData = true;
+    }
+
+    // ---------------------------------------------------------------------------
     // snapshot - harvest counters, apply debug offsets, cross-compare layers
     // ---------------------------------------------------------------------------
 
@@ -409,6 +422,38 @@ namespace PhantiCheat {
 
             if (maxVal > minVal * 2)
                 anomalyFlags |= AC_ANOMALY_LAYER_COUNT_MISMATCH;
+        }
+
+        // --- Layer 0 (kernel IRP) cross-comparison ---
+        // If we have kernel driver input data, compare it against user-mode layers.
+        {
+            std::lock_guard<std::mutex> lock(m_kernelDataMutex);
+            if (m_hasKernelData)
+            {
+                // Propagate kernel-level anomaly flags directly
+                anomalyFlags |= m_kernelData.AnomalyFlags;
+
+                // Cross-layer: if kernel saw significantly more IRPs than Raw Input
+                // reported, something is filtering/suppressing between the I/O manager
+                // and the Raw Input thread. This catches kernel-level input suppression.
+                ULONG kernelKeyTotal = m_kernelData.HardwareIrpCount + m_kernelData.SoftwareIrpCount;
+                if (kernelKeyTotal > 0 && rawKb == 0 && sdlKb == 0)
+                {
+                    // Kernel saw keystrokes but nothing reached user-mode -- suppression
+                    anomalyFlags |= AC_ANOMALY_KEYSTATE_WITHOUT_SDL;
+                }
+
+                // Cross-layer: if Raw Input / SDL saw events but kernel saw zero IRPs,
+                // something is injecting above the I/O manager level (or the driver
+                // is not attached). With the driver attached, this is a strong signal.
+                if (kernelKeyTotal == 0 && rawKb > 2)
+                {
+                    anomalyFlags |= AC_ANOMALY_KERNEL_IRQ_MISMATCH;
+                }
+
+                m_hasKernelData = false;
+                memset(&m_kernelData, 0, sizeof(m_kernelData));
+            }
         }
 
         // Apply forced debug flags

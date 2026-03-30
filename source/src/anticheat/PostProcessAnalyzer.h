@@ -23,6 +23,9 @@
 #define PP_ANOMALY_PERFECT_ACCURACY         0x00000004  // statistically implausible hit ratio in window
 #define PP_ANOMALY_ACTION_WITHOUT_KEYSTATE  0x00000008  // movement/reload actions with no key transitions
 #define PP_ANOMALY_INPUT_TELEMETRY_GAP      0x00000010  // expected telemetry snapshots never arrived
+#define PP_ANOMALY_KERNEL_INPUT_INJECT     0x00000020  // kernel driver detected software-injected IRPs
+#define PP_ANOMALY_KERNEL_DEVSTACK_TAMPER  0x00000040  // unknown filter drivers in keyboard/mouse stack
+#define PP_ANOMALY_KERNEL_TIMING_INHUMAN   0x00000080  // sub-millisecond inter-keystroke timing at I/O level
 
 // Severity levels for flagged anomalies
 enum PPSeverity {
@@ -59,6 +62,16 @@ struct PPInputActivity {
     uint32_t anomalyFlagsUnion;     // OR of all AnomalyFlags seen in window
     int      snapshotsReceived;     // how many telemetry snapshots arrived
 
+    // Layer 0: kernel driver IRP-level input data
+    uint32_t totalKernelHardwareKeyIrps;
+    uint32_t totalKernelSoftwareKeyIrps;
+    uint32_t totalKernelHardwareMouseIrps;
+    uint32_t totalKernelSoftwareMouseIrps;
+    uint32_t kernelMinInterKeystrokeUs;  // minimum across all snapshots in window
+    uint32_t kernelMinInterMouseUs;
+    uint32_t kernelAnomalyFlagsUnion;    // OR of all kernel anomaly flags
+    int      kernelSnapshotsReceived;
+
     void reset()
     {
         totalSdlKeyEvents = totalSdlMouseEvents = 0;
@@ -66,6 +79,12 @@ struct PPInputActivity {
         totalKeyStateTransitions = totalMouseButtonTransitions = 0;
         anomalyFlagsUnion = 0;
         snapshotsReceived = 0;
+        totalKernelHardwareKeyIrps = totalKernelSoftwareKeyIrps = 0;
+        totalKernelHardwareMouseIrps = totalKernelSoftwareMouseIrps = 0;
+        kernelMinInterKeystrokeUs = 0xFFFFFFFF;
+        kernelMinInterMouseUs = 0xFFFFFFFF;
+        kernelAnomalyFlagsUnion = 0;
+        kernelSnapshotsReceived = 0;
     }
 };
 
@@ -151,6 +170,9 @@ namespace PostProcess {
 
     // Feed an input-telemetry snapshot into the client's current window.
     void recordInputTelemetry(PostProcessState &pps, const AcInputAnomalyData *data);
+
+    // Feed kernel-level input telemetry into the client's current window.
+    void recordKernelInputTelemetry(PostProcessState &pps, const AcKernelInputData *data);
 
     // Evaluate all rules for the current window. Returns true if any anomaly was detected.
     // The caller should check result.anomalyFlags and result.maxSeverity.

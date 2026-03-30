@@ -32,6 +32,7 @@
 #define AC_TELEMETRY_HEARTBEAT        2
 #define AC_TELEMETRY_INPUT_ANOMALY    3
 #define AC_TELEMETRY_INPUT_DEBUG      4
+#define AC_TELEMETRY_KERNEL_INPUT     5
 
 // Limits
 #define AC_MAX_TELEMETRY_ENTRIES  16
@@ -115,6 +116,37 @@ typedef struct _AC_INPUT_ANOMALY_DATA {
 #define AC_ANOMALY_KEYSTATE_WITHOUT_SDL  0x00000010  // Kernel state changed but SDL saw nothing
 #define AC_ANOMALY_LAYER_COUNT_MISMATCH  0x00000020  // General cross-layer count divergence
 #define AC_ANOMALY_DEBUG_SIMULATED       0x80000000  // This anomaly was debug-injected
+
+// Kernel-layer anomaly flags (from driver input monitor module)
+#define AC_ANOMALY_KERNEL_DEVSTACK_TAMPER  0x00000040  // Unknown filter driver in keyboard/mouse stack
+#define AC_ANOMALY_KERNEL_IRQ_MISMATCH     0x00000080  // IRP count diverges from user-mode Raw Input count
+#define AC_ANOMALY_KERNEL_INJECT_DETECTED  0x00000100  // IRPs originated from non-hardware source
+#define AC_ANOMALY_KERNEL_TIMING_INHUMAN   0x00000200  // Sub-millisecond inter-keystroke timing at I/O level
+
+// Payload for AC_TELEMETRY_KERNEL_INPUT (fits inside AC_TELEMETRY_ENTRY.Data)
+// Produced by the kernel driver's input monitor module, which attaches as an
+// upper filter on the keyboard and mouse class device stacks to intercept
+// IRP_MJ_READ completions -- the lowest observable layer in the input pipeline.
+//
+// This provides "Layer 0" ground truth that kernel-level cheats cannot spoof
+// without modifying the PhantiCheat driver itself:
+//   - HardwareIrpCount: IRPs completed by the real HID miniport
+//   - SoftwareIrpCount: IRPs injected by other kernel drivers (not from hardware)
+//   - FilterDriversInStack: number of filter drivers attached to the device stack
+//   - UnknownFilterDrivers: filter drivers not in our allowlist
+//   - MinInterKeystrokeUs: fastest interval between two consecutive keystrokes (microseconds)
+//   - AnomalyFlags: kernel-level anomaly bitfield
+typedef struct _AC_KERNEL_INPUT_DATA {
+    ULONG HardwareIrpCount;         // Keyboard IRPs from actual hardware path
+    ULONG SoftwareIrpCount;         // Keyboard IRPs from software/injected sources
+    ULONG HardwareMouseIrpCount;    // Mouse IRPs from actual hardware path
+    ULONG SoftwareMouseIrpCount;    // Mouse IRPs from software/injected sources
+    ULONG FilterDriversInStack;     // Total filter drivers on keyboard device stack
+    ULONG UnknownFilterDrivers;     // Filter drivers not on known-good allowlist
+    ULONG MinInterKeystrokeUs;      // Minimum inter-keystroke interval in microseconds
+    ULONG MinInterMouseUs;          // Minimum inter-mouse-event interval in microseconds
+    ULONG AnomalyFlags;             // AC_ANOMALY_KERNEL_* flags
+} AC_KERNEL_INPUT_DATA;
 
 // Payload for AC_TELEMETRY_INPUT_DEBUG (debug simulation config, fits in Data)
 typedef struct _AC_INPUT_DEBUG_CONFIG {
