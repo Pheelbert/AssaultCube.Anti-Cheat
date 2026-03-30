@@ -40,7 +40,6 @@ jobs:
   kernel-driver:
     name: Kernel Driver (WDK)
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
@@ -159,15 +158,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="build-$(date -u +%Y%m%d-%H%M%S)"
-          ASSETS=(artifacts/windows-client/ac_client.exe artifacts/linux-server/native_server)
-          if [ -f artifacts/kernel-driver-Release/phanticheat.sys ]; then
-            ASSETS+=(artifacts/kernel-driver-Release/phanticheat.sys)
-          fi
           gh release create "$TAG" \
             --title "Latest Build ($(date -u +%Y-%m-%d))" \
             --notes "Automated build from commit ${{ github.sha }}" \
             --latest \
-            "${ASSETS[@]}"
+            artifacts/windows-client/ac_client.exe \
+            artifacts/kernel-driver-Release/phanticheat.sys \
+            artifacts/linux-server/native_server
 
   # ---------------------------------------------------------------------------
   # Notify – post a build summary (runs on success or failure)
