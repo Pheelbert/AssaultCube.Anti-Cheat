@@ -103,6 +103,7 @@
     <ClCompile Include="scan_engine.c" />
     <ClCompile Include="modules\heartbeat.c" />
     <ClCompile Include="modules\windows_version.c" />
+    <ClCompile Include="modules\input_monitor.c" />
   </ItemGroup>
 
   <!-- ================================================================== -->
@@ -118,8 +119,13 @@
   <!-- Driver signing                                                      -->
   <!-- ================================================================== -->
   <PropertyGroup>
-    <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
+    <SignMode>TestSign</SignMode>
   </PropertyGroup>
+  <ItemDefinitionGroup>
+    <DriverSign>
+      <FileDigestAlgorithm>SHA256</FileDigestAlgorithm>
+    </DriverSign>
+  </ItemDefinitionGroup>
 
   <!-- ================================================================== -->
   <!-- Import WDK targets                                                  -->

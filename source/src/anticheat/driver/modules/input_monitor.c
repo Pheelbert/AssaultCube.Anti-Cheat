@@ -18,6 +18,8 @@
 //
 
 #include <ntddk.h>
+#include <ntddkbd.h>
+#include <ntddmou.h>
 #include "../../ac_shared.h"
 #include "../scan_engine.h"
 
@@ -45,9 +47,9 @@ static volatile LONG g_MinInterMouseUs = 0x7FFFFFFF;
 static LARGE_INTEGER g_QpcFrequency = { 0 };
 
 // Filter attachment state
-static PDEVICE_OBJECT g_KeyboardFilterDevice = NULL;
+PDEVICE_OBJECT g_KeyboardFilterDevice = NULL;
 static PDEVICE_OBJECT g_KeyboardTargetDevice = NULL;
-static PDEVICE_OBJECT g_MouseFilterDevice = NULL;
+PDEVICE_OBJECT g_MouseFilterDevice = NULL;
 static PDEVICE_OBJECT g_MouseTargetDevice = NULL;
 
 // Device stack analysis (computed during attach)

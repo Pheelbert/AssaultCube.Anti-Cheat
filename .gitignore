@@ -1,4 +1,13 @@
 .travis.yml
+
+# Windows build output
+bin_win32/
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.sys
 *.o
 *.lo
 shadows.dat
@@ -44,3 +53,4 @@ private/*
 .DS_Store
 __pycache__/
 *.pyc
+.claude/
