@@ -43,13 +43,8 @@ namespace PhantiCheat {
         if (m_driverHandle == INVALID_HANDLE_VALUE)
         {
             DWORD err = GetLastError();
-            std::cerr << "[PhantiCheat] Could not open driver device (error " << err << "). "
-                      << "Kernel anti-cheat will not be active." << std::endl;
+            std::cerr << "[PhantiCheat] Could not open driver device (error " << err << ")." << std::endl;
             m_driverConnected.store(false);
-
-            // Start background thread anyway for input tracking polling
-            m_running.store(true);
-            m_worker = std::thread(&AntiCheatManager::workerThread, this);
             return false;
         }
 

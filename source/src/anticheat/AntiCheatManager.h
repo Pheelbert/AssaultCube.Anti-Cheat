@@ -20,7 +20,7 @@ namespace PhantiCheat {
 
         // Opens driver device handle and starts the background polling thread.
         // Returns true if the driver was found and communication established.
-        // Returns false if driver not loaded (game continues without kernel AC).
+        // Returns false if driver not loaded (caller should abort launch).
         bool initialize();
 
         // Stops background thread and closes driver handle. Safe to call multiple times.

@@ -19,7 +19,13 @@ void initanticheat()
     if (!g_antiCheatManager)
     {
         g_antiCheatManager = new PhantiCheat::AntiCheatManager();
-        g_antiCheatManager->initialize();
+        if (!g_antiCheatManager->initialize())
+        {
+            delete g_antiCheatManager;
+            g_antiCheatManager = NULL;
+            fatal("PhantiCheat anti-cheat driver is not running. Please load phanticheat.sys before launching the game.");
+            return;
+        }
     }
 }
 
