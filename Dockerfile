@@ -13,7 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 COPY source/ source/
 
-RUN cd source/src && make clean && make server && make server_install
+RUN find source/ -type f -exec sed -i 's/\r$//' {} + \
+    && chmod +x source/enet/configure source/enet/config.sub source/enet/config.guess source/enet/install-sh source/enet/depcomp \
+    && cd source/src && make clean && make server && make server_install
 
 # --- Runtime stage ---
 FROM ubuntu:22.04
