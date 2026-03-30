@@ -13,6 +13,18 @@ setlocal
 ::   build_driver.bat clean        Clean all build artifacts
 :: ============================================================================
 
+:: Request admin privileges (needed for sc stop/delete and driver signing)
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Requesting administrator privileges...
+    if "%~1"=="" (
+        powershell -Command "Start-Process '%~f0' -Verb RunAs"
+    ) else (
+        powershell -Command "Start-Process '%~f0' -ArgumentList '%~1' -Verb RunAs"
+    )
+    exit /b
+)
+
 set "TARGET=%~1"
 if "%TARGET%"=="" set "TARGET=release"
 
@@ -35,6 +47,20 @@ if not defined MSBUILD (
 echo Using MSBuild: %MSBUILD%
 
 set "PROJ=%~dp0source\src\anticheat\driver\phanticheat.vcxproj"
+
+:: Tear down the driver service so the .sys file isn't locked during build
+sc query PhantiCheat >nul 2>&1
+if %errorlevel% equ 0 (
+    echo Stopping PhantiCheat service...
+    sc stop PhantiCheat >nul 2>&1
+    :: Wait for driver to finish unloading
+    timeout /t 3 /nobreak >nul 2>&1
+    sc delete PhantiCheat >nul 2>&1
+    timeout /t 1 /nobreak >nul 2>&1
+    echo Service removed.
+) else (
+    echo No existing PhantiCheat service found.
+)
 
 if /i "%TARGET%"=="clean" (
     echo Cleaning driver build artifacts...
@@ -63,7 +89,9 @@ exit /b 1
 :done
 if errorlevel 1 (
     echo BUILD FAILED.
+    PAUSE
     exit /b 1
 )
 echo BUILD SUCCEEDED. Output: bin_win32\driver\
+PAUSE
 exit /b 0

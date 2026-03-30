@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include "../../ac_shared.h"
+#include "../ac_log.h"
 #include "../scan_engine.h"
 
 static NTSTATUS AcWindowsVersionExecute(AC_TELEMETRY_ENTRY* OutEntry)
@@ -28,7 +29,7 @@ static NTSTATUS AcWindowsVersionExecute(AC_TELEMETRY_ENTRY* OutEntry)
     status = RtlGetVersion(&versionInfo);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] RtlGetVersion failed: 0x%08X\n", status);
+        AcLogWrite("RtlGetVersion failed: 0x%08X", status);
         return status;
     }
 
@@ -48,7 +49,7 @@ static NTSTATUS AcWindowsVersionExecute(AC_TELEMETRY_ENTRY* OutEntry)
         min(sizeof(payload->CSDVersion) - sizeof(WCHAR), sizeof(versionInfo.szCSDVersion))
     );
 
-    DbgPrint("[PhantiCheat] Windows version: %lu.%lu.%lu\n",
+    AcLogWrite("Windows version: %lu.%lu.%lu",
              payload->MajorVersion, payload->MinorVersion, payload->BuildNumber);
 
     return STATUS_SUCCESS;

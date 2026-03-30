@@ -21,6 +21,7 @@
 #include <ntddkbd.h>
 #include <ntddmou.h>
 #include "../../ac_shared.h"
+#include "../ac_log.h"
 #include "../scan_engine.h"
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,16 @@ PDEVICE_OBJECT g_KeyboardFilterDevice = NULL;
 static PDEVICE_OBJECT g_KeyboardTargetDevice = NULL;
 PDEVICE_OBJECT g_MouseFilterDevice = NULL;
 static PDEVICE_OBJECT g_MouseTargetDevice = NULL;
+
+// Remove locks: track outstanding IRPs so we can drain them before detach.
+static IO_REMOVE_LOCK g_KeyboardRemoveLock;
+static IO_REMOVE_LOCK g_MouseRemoveLock;
+
+// Set to 1 when detach starts; dispatch functions reject new IRPs.
+static volatile LONG g_Detaching = 0;
+
+// Ensures AcInputMonitorDetach() is idempotent (called from both Cleanup and DriverUnload).
+static volatile LONG g_DetachDone = 0;
 
 // Device stack analysis (computed during attach)
 static ULONG g_KeyboardFilterCount = 0;
@@ -96,6 +107,9 @@ NTSTATUS AcInputMonitorAttach(PDRIVER_OBJECT DriverObject)
     PFILE_OBJECT fileObject = NULL;
     PDEVICE_OBJECT topOfStack = NULL;
 
+    IoInitializeRemoveLock(&g_KeyboardRemoveLock, 'KbdL', 0, 0);
+    IoInitializeRemoveLock(&g_MouseRemoveLock, 'MouL', 0, 0);
+
     g_QpcFrequency.QuadPart = 0;
     KeQueryPerformanceCounter(&g_QpcFrequency);
     if (g_QpcFrequency.QuadPart == 0)
@@ -107,7 +121,7 @@ NTSTATUS AcInputMonitorAttach(PDRIVER_OBJECT DriverObject)
     status = IoGetDeviceObjectPointer(&kbdName, FILE_READ_DATA, &fileObject, &topOfStack);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat:InputMon] Cannot get KeyboardClass0: 0x%08X\n", status);
+        AcLogWrite("InputMon: Cannot get KeyboardClass0: 0x%08X", status);
         goto attach_mouse;
     }
     ObDereferenceObject(fileObject);
@@ -128,7 +142,7 @@ NTSTATUS AcInputMonitorAttach(PDRIVER_OBJECT DriverObject)
     );
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat:InputMon] Cannot create keyboard filter device: 0x%08X\n", status);
+        AcLogWrite("InputMon: Cannot create keyboard filter device: 0x%08X", status);
         goto attach_mouse;
     }
 
@@ -139,14 +153,14 @@ NTSTATUS AcInputMonitorAttach(PDRIVER_OBJECT DriverObject)
     g_KeyboardTargetDevice = IoAttachDeviceToDeviceStack(g_KeyboardFilterDevice, topOfStack);
     if (!g_KeyboardTargetDevice)
     {
-        DbgPrint("[PhantiCheat:InputMon] IoAttachDeviceToDeviceStack failed for keyboard.\n");
+        AcLogWrite("InputMon: IoAttachDeviceToDeviceStack failed for keyboard");
         IoDeleteDevice(g_KeyboardFilterDevice);
         g_KeyboardFilterDevice = NULL;
         goto attach_mouse;
     }
 
-    DbgPrint("[PhantiCheat:InputMon] Attached to keyboard stack (%lu filters, %lu unknown).\n",
-             g_KeyboardFilterCount, g_KeyboardUnknownFilters);
+    AcLogWrite("InputMon: Attached to keyboard stack (%lu filters, %lu unknown). FilterDev=%p TargetDev=%p",
+             g_KeyboardFilterCount, g_KeyboardUnknownFilters, g_KeyboardFilterDevice, g_KeyboardTargetDevice);
 
 attach_mouse:
     // --- Mouse ---
@@ -155,7 +169,7 @@ attach_mouse:
     status = IoGetDeviceObjectPointer(&mouseName, FILE_READ_DATA, &fileObject, &topOfStack);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat:InputMon] Cannot get PointerClass0: 0x%08X\n", status);
+        AcLogWrite("InputMon: Cannot get PointerClass0: 0x%08X", status);
         goto done;
     }
     ObDereferenceObject(fileObject);
@@ -174,7 +188,7 @@ attach_mouse:
     );
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat:InputMon] Cannot create mouse filter device: 0x%08X\n", status);
+        AcLogWrite("InputMon: Cannot create mouse filter device: 0x%08X", status);
         goto done;
     }
 
@@ -184,14 +198,14 @@ attach_mouse:
     g_MouseTargetDevice = IoAttachDeviceToDeviceStack(g_MouseFilterDevice, topOfStack);
     if (!g_MouseTargetDevice)
     {
-        DbgPrint("[PhantiCheat:InputMon] IoAttachDeviceToDeviceStack failed for mouse.\n");
+        AcLogWrite("InputMon: IoAttachDeviceToDeviceStack failed for mouse");
         IoDeleteDevice(g_MouseFilterDevice);
         g_MouseFilterDevice = NULL;
         goto done;
     }
 
-    DbgPrint("[PhantiCheat:InputMon] Attached to mouse stack (%lu filters, %lu unknown).\n",
-             g_MouseFilterCount, g_MouseUnknownFilters);
+    AcLogWrite("InputMon: Attached to mouse stack (%lu filters, %lu unknown). FilterDev=%p TargetDev=%p",
+             g_MouseFilterCount, g_MouseUnknownFilters, g_MouseFilterDevice, g_MouseTargetDevice);
 
 done:
     return STATUS_SUCCESS; // non-fatal even if attachment fails
@@ -203,8 +217,27 @@ done:
 //
 void AcInputMonitorDetach(void)
 {
+    // Idempotency: only run once (called from both Cleanup and DriverUnload)
+    if (InterlockedCompareExchange(&g_DetachDone, 1, 0) != 0)
+    {
+        AcLogWrite("InputMon: Detach already completed, skipping.");
+        return;
+    }
+
+    AcLogWrite("InputMon: Detaching. KbdTarget=%p KbdFilter=%p MouseTarget=%p MouseFilter=%p",
+               g_KeyboardTargetDevice, g_KeyboardFilterDevice,
+               g_MouseTargetDevice, g_MouseFilterDevice);
+
+    // Stop dispatch functions from accepting new IRPs
+    InterlockedExchange(&g_Detaching, 1);
+
+    // --- Keyboard: drain pending IRPs, then detach ---
     if (g_KeyboardTargetDevice)
     {
+        AcLogWrite("InputMon: Waiting for pending keyboard IRPs to drain...");
+        IoReleaseRemoveLockAndWait(&g_KeyboardRemoveLock, NULL);
+        AcLogWrite("InputMon: Keyboard IRPs drained. Detaching.");
+
         IoDetachDevice(g_KeyboardTargetDevice);
         g_KeyboardTargetDevice = NULL;
     }
@@ -213,8 +246,14 @@ void AcInputMonitorDetach(void)
         IoDeleteDevice(g_KeyboardFilterDevice);
         g_KeyboardFilterDevice = NULL;
     }
+
+    // --- Mouse: drain pending IRPs, then detach ---
     if (g_MouseTargetDevice)
     {
+        AcLogWrite("InputMon: Waiting for pending mouse IRPs to drain...");
+        IoReleaseRemoveLockAndWait(&g_MouseRemoveLock, NULL);
+        AcLogWrite("InputMon: Mouse IRPs drained. Detaching.");
+
         IoDetachDevice(g_MouseTargetDevice);
         g_MouseTargetDevice = NULL;
     }
@@ -224,7 +263,7 @@ void AcInputMonitorDetach(void)
         g_MouseFilterDevice = NULL;
     }
 
-    DbgPrint("[PhantiCheat:InputMon] Filter devices detached.\n");
+    AcLogWrite("InputMon: Filter devices detached.");
 }
 
 // ---------------------------------------------------------------------------
@@ -238,23 +277,52 @@ void AcInputMonitorDetach(void)
 //
 NTSTATUS AcInputMonitorDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-    // Determine which device stack this is for
-    if (DeviceObject == g_KeyboardFilterDevice && g_KeyboardTargetDevice)
+    NTSTATUS status;
+
+    // Reject new IRPs if we are detaching
+    if (InterlockedCompareExchange(&g_Detaching, 0, 0) != 0)
+        goto complete_invalid;
+
+    if (DeviceObject == g_KeyboardFilterDevice)
     {
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp, AcInputMonitorReadComplete, NULL, TRUE, TRUE, TRUE);
-        return IoCallDriver(g_KeyboardTargetDevice, Irp);
+        status = IoAcquireRemoveLock(&g_KeyboardRemoveLock, Irp);
+        if (!NT_SUCCESS(status))
+            goto complete_invalid;
+
+        if (g_KeyboardTargetDevice)
+        {
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, AcInputMonitorReadComplete, NULL, TRUE, TRUE, TRUE);
+            return IoCallDriver(g_KeyboardTargetDevice, Irp);
+            // Lock released in AcInputMonitorReadComplete
+        }
+
+        IoReleaseRemoveLock(&g_KeyboardRemoveLock, Irp);
+        goto complete_invalid;
     }
-    else if (DeviceObject == g_MouseFilterDevice && g_MouseTargetDevice)
+    else if (DeviceObject == g_MouseFilterDevice)
     {
-        IoCopyCurrentIrpStackLocationToNext(Irp);
-        IoSetCompletionRoutine(Irp, AcMouseMonitorReadComplete, NULL, TRUE, TRUE, TRUE);
-        return IoCallDriver(g_MouseTargetDevice, Irp);
+        status = IoAcquireRemoveLock(&g_MouseRemoveLock, Irp);
+        if (!NT_SUCCESS(status))
+            goto complete_invalid;
+
+        if (g_MouseTargetDevice)
+        {
+            IoCopyCurrentIrpStackLocationToNext(Irp);
+            IoSetCompletionRoutine(Irp, AcMouseMonitorReadComplete, NULL, TRUE, TRUE, TRUE);
+            return IoCallDriver(g_MouseTargetDevice, Irp);
+            // Lock released in AcMouseMonitorReadComplete
+        }
+
+        IoReleaseRemoveLock(&g_MouseRemoveLock, Irp);
+        goto complete_invalid;
     }
 
-    // Not our filter device -- shouldn't happen, pass through
-    IoSkipCurrentIrpStackLocation(Irp);
-    return IoCallDriver(g_KeyboardTargetDevice ? g_KeyboardTargetDevice : g_MouseTargetDevice, Irp);
+complete_invalid:
+    Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_INVALID_DEVICE_REQUEST;
 }
 
 //
@@ -264,19 +332,37 @@ NTSTATUS AcInputMonitorDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 NTSTATUS AcInputMonitorDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     PDEVICE_OBJECT target = NULL;
+    PIO_REMOVE_LOCK removeLock = NULL;
+    NTSTATUS status;
+
+    // Reject new IRPs if we are detaching
+    if (InterlockedCompareExchange(&g_Detaching, 0, 0) != 0)
+        goto complete_error;
 
     if (DeviceObject == g_KeyboardFilterDevice)
-        target = g_KeyboardTargetDevice;
-    else if (DeviceObject == g_MouseFilterDevice)
-        target = g_MouseTargetDevice;
-
-    if (target)
     {
-        IoSkipCurrentIrpStackLocation(Irp);
-        return IoCallDriver(target, Irp);
+        target = g_KeyboardTargetDevice;
+        removeLock = &g_KeyboardRemoveLock;
+    }
+    else if (DeviceObject == g_MouseFilterDevice)
+    {
+        target = g_MouseTargetDevice;
+        removeLock = &g_MouseRemoveLock;
     }
 
-    // Fallback: complete with error
+    if (target && removeLock)
+    {
+        status = IoAcquireRemoveLock(removeLock, Irp);
+        if (!NT_SUCCESS(status))
+            goto complete_error;
+
+        IoSkipCurrentIrpStackLocation(Irp);
+        status = IoCallDriver(target, Irp);
+        IoReleaseRemoveLock(removeLock, Irp);
+        return status;
+    }
+
+complete_error:
     Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -300,7 +386,8 @@ static NTSTATUS AcInputMonitorReadComplete(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Context);
 
-    if (Irp->IoStatus.Status == STATUS_SUCCESS && Irp->IoStatus.Information > 0)
+    if (Irp->IoStatus.Status == STATUS_SUCCESS && Irp->IoStatus.Information > 0
+        && Irp->AssociatedIrp.SystemBuffer != NULL)
     {
         // KEYBOARD_INPUT_DATA is what kbdclass delivers per read IRP
         ULONG dataSize = (ULONG)Irp->IoStatus.Information;
@@ -337,9 +424,10 @@ static NTSTATUS AcInputMonitorReadComplete(
             else
             {
                 LARGE_INTEGER now = KeQueryPerformanceCounter(NULL);
-                if (g_LastKeystrokeTime.QuadPart != 0)
+                LONGLONG lastTime = InterlockedCompareExchange64(&g_LastKeystrokeTime.QuadPart, 0, 0);
+                if (lastTime != 0)
                 {
-                    LONGLONG deltaUs = ((now.QuadPart - g_LastKeystrokeTime.QuadPart) * 1000000)
+                    LONGLONG deltaUs = ((now.QuadPart - lastTime) * 1000000)
                                        / g_QpcFrequency.QuadPart;
                     if (deltaUs >= 0 && deltaUs < (LONGLONG)InterlockedCompareExchange(
                             &g_MinInterKeystrokeUs, 0, 0))
@@ -347,7 +435,7 @@ static NTSTATUS AcInputMonitorReadComplete(
                         InterlockedExchange(&g_MinInterKeystrokeUs, (LONG)deltaUs);
                     }
                 }
-                g_LastKeystrokeTime = now;
+                InterlockedExchange64(&g_LastKeystrokeTime.QuadPart, now.QuadPart);
             }
         }
     }
@@ -355,6 +443,7 @@ static NTSTATUS AcInputMonitorReadComplete(
     if (Irp->PendingReturned)
         IoMarkIrpPending(Irp);
 
+    IoReleaseRemoveLock(&g_KeyboardRemoveLock, Irp);
     return STATUS_SUCCESS;
 }
 
@@ -369,7 +458,8 @@ static NTSTATUS AcMouseMonitorReadComplete(
     UNREFERENCED_PARAMETER(DeviceObject);
     UNREFERENCED_PARAMETER(Context);
 
-    if (Irp->IoStatus.Status == STATUS_SUCCESS && Irp->IoStatus.Information > 0)
+    if (Irp->IoStatus.Status == STATUS_SUCCESS && Irp->IoStatus.Information > 0
+        && Irp->AssociatedIrp.SystemBuffer != NULL)
     {
         ULONG dataSize = (ULONG)Irp->IoStatus.Information;
         ULONG count = dataSize / sizeof(MOUSE_INPUT_DATA);
@@ -395,9 +485,10 @@ static NTSTATUS AcMouseMonitorReadComplete(
             if (data[i].ButtonFlags != 0)
             {
                 LARGE_INTEGER now = KeQueryPerformanceCounter(NULL);
-                if (g_LastMouseTime.QuadPart != 0)
+                LONGLONG lastMouseTime = InterlockedCompareExchange64(&g_LastMouseTime.QuadPart, 0, 0);
+                if (lastMouseTime != 0)
                 {
-                    LONGLONG deltaUs = ((now.QuadPart - g_LastMouseTime.QuadPart) * 1000000)
+                    LONGLONG deltaUs = ((now.QuadPart - lastMouseTime) * 1000000)
                                        / g_QpcFrequency.QuadPart;
                     if (deltaUs >= 0 && deltaUs < (LONGLONG)InterlockedCompareExchange(
                             &g_MinInterMouseUs, 0, 0))
@@ -405,7 +496,7 @@ static NTSTATUS AcMouseMonitorReadComplete(
                         InterlockedExchange(&g_MinInterMouseUs, (LONG)deltaUs);
                     }
                 }
-                g_LastMouseTime = now;
+                InterlockedExchange64(&g_LastMouseTime.QuadPart, now.QuadPart);
             }
         }
     }
@@ -413,6 +504,7 @@ static NTSTATUS AcMouseMonitorReadComplete(
     if (Irp->PendingReturned)
         IoMarkIrpPending(Irp);
 
+    IoReleaseRemoveLock(&g_MouseRemoveLock, Irp);
     return STATUS_SUCCESS;
 }
 
@@ -468,8 +560,8 @@ static ULONG AcCountDeviceStackFilters(PDEVICE_OBJECT TopOfStack, ULONG *unknown
                 unknown++;
                 if (current->DriverObject->DriverName.Buffer)
                 {
-                    DbgPrint("[PhantiCheat:InputMon] Unknown filter driver in stack: %wZ\n",
-                             &current->DriverObject->DriverName);
+                    AcLogWrite("InputMon: Unknown filter driver in stack (ptr=%p)",
+                             current->DriverObject);
                 }
             }
         }

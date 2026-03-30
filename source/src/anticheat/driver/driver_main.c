@@ -13,15 +13,21 @@
 
 #include <ntddk.h>
 #include "../ac_shared.h"
+#include "ac_log.h"
 #include "scan_engine.h"
 #include "modules/input_monitor.h"
 
 // Track driver load time for uptime calculation (non-static: referenced by heartbeat module)
 LARGE_INTEGER g_DriverLoadTime;
 
+// Client process tracking: detach filters when the client exits (even on crash).
+// Windows sends IRP_MJ_CLEANUP for all open handles during process teardown.
+static HANDLE g_ClientProcessId = NULL;
+
 // Forward declarations
 static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchClose(PDEVICE_OBJECT DeviceObject, PIRP Irp);
+static NTSTATUS AcDispatchCleanup(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp);
 static NTSTATUS AcDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp);
@@ -55,11 +61,9 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
 
     UNREFERENCED_PARAMETER(RegistryPath);
 
-    DbgPrint("[PhantiCheat] DriverEntry called.\n");
-
     KeQuerySystemTime(&g_DriverLoadTime);
 
-    // Create device
+    // Create device first, then init logging (need device to exist)
     RtlInitUnicodeString(&deviceName, AC_DEVICE_NAME);
     status = IoCreateDevice(
         DriverObject,
@@ -87,32 +91,56 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT DriverObject, PUNICODE_STRING RegistryPath)
         return status;
     }
 
-    // Set up dispatch routines
+    // Initialize file logging (after device creation so we're past early failures)
+    AcLogInit();
+    AcLogWrite("DriverEntry called. DeviceObject=%p", deviceObject);
+
+    // Filter driver MUST pass through ALL IRP types it doesn't explicitly handle.
+    // The default handler (IopInvalidDeviceRequest) completes IRPs with an error,
+    // which breaks the device stack for PnP, Power, WMI, etc.
+    {
+        ULONG i;
+        for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
+            DriverObject->MajorFunction[i] = AcDispatchPassthrough;
+    }
+    AcLogWrite("MajorFunction[0..%d] set to passthrough", IRP_MJ_MAXIMUM_FUNCTION);
+
+    // Override specific handlers
     DriverObject->MajorFunction[IRP_MJ_CREATE] = AcDispatchCreate;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = AcDispatchClose;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP] = AcDispatchCleanup;
     DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = AcDispatchDeviceControl;
     DriverObject->MajorFunction[IRP_MJ_READ] = AcDispatchRead;
-    // Internal device control is used by class drivers for keyboard/mouse data
-    DriverObject->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = AcDispatchPassthrough;
     DriverObject->DriverUnload = AcDriverUnload;
+    AcLogWrite("Specific dispatch handlers registered");
 
     // Initialize scan engine (registers built-in modules)
     status = AcScanEngineInit();
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] Scan engine init failed: 0x%08X\n", status);
+        AcLogWrite("Scan engine init failed: 0x%08X", status);
         // Non-fatal: driver still loads, just no modules
+    }
+    else
+    {
+        AcLogWrite("Scan engine initialized OK");
     }
 
     // Attach input monitor filters to keyboard/mouse device stacks
+    AcLogWrite("Attaching input monitor filters...");
     status = AcInputMonitorAttach(DriverObject);
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] Input monitor attach failed: 0x%08X\n", status);
+        AcLogWrite("Input monitor attach failed: 0x%08X", status);
         // Non-fatal: driver still works, just no kernel-level input monitoring
     }
+    else
+    {
+        AcLogWrite("Input monitor attach returned OK. KbdFilter=%p MouseFilter=%p",
+                   g_KeyboardFilterDevice, g_MouseFilterDevice);
+    }
 
-    DbgPrint("[PhantiCheat] Driver loaded successfully.\n");
+    AcLogWrite("Driver loaded successfully.");
     return STATUS_SUCCESS;
 }
 
@@ -123,20 +151,24 @@ static void AcDriverUnload(PDRIVER_OBJECT DriverObject)
 {
     UNICODE_STRING symlinkName;
 
-    DbgPrint("[PhantiCheat] Driver unloading.\n");
+    AcLogWrite("Driver unloading...");
 
-    // Detach input monitor filters before deleting our control device
+    AcLogWrite("Detaching input monitor filters...");
     AcInputMonitorDetach();
+    AcLogWrite("Input monitor detached.");
 
     RtlInitUnicodeString(&symlinkName, AC_SYMLINK_NAME);
     IoDeleteSymbolicLink(&symlinkName);
+    AcLogWrite("Symbolic link deleted.");
 
     if (DriverObject->DeviceObject)
     {
         IoDeleteDevice(DriverObject->DeviceObject);
+        AcLogWrite("Device object deleted.");
     }
 
-    DbgPrint("[PhantiCheat] Driver unloaded.\n");
+    AcLogWrite("Driver unloaded.");
+    AcLogClose();
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +179,7 @@ static NTSTATUS AcDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     if (AcIsFilterDevice(DeviceObject))
         return AcInputMonitorDispatchRead(DeviceObject, Irp);
 
-    // Our control device doesn't support reads
+    AcLogWrite("READ on control device (unexpected). DevObj=%p", DeviceObject);
     Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -159,9 +191,16 @@ static NTSTATUS AcDispatchRead(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 // ---------------------------------------------------------------------------
 static NTSTATUS AcDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
-    if (AcIsFilterDevice(DeviceObject))
+    BOOLEAN isFilter = AcIsFilterDevice(DeviceObject);
+
+    if (isFilter)
         return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
 
+    // Control device: reject unknown IRP types
+    {
+        PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
+        AcLogWrite("ControlPassthrough: DevObj=%p MJ=0x%X (rejected)", DeviceObject, (ULONG)irpSp->MajorFunction);
+    }
     Irp->IoStatus.Status = STATUS_INVALID_DEVICE_REQUEST;
     Irp->IoStatus.Information = 0;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
@@ -175,9 +214,14 @@ static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     // If this is a filter device, pass through
     if (AcIsFilterDevice(DeviceObject))
+    {
+        AcLogWrite("CREATE on filter device: DevObj=%p", DeviceObject);
         return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
+    }
 
-    DbgPrint("[PhantiCheat] Device opened.\n");
+    // Track the client process so we can clean up if it crashes
+    g_ClientProcessId = PsGetCurrentProcessId();
+    AcLogWrite("Device opened (control device). ClientPID=%lu", (ULONG)(ULONG_PTR)g_ClientProcessId);
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = 0;
@@ -191,9 +235,42 @@ static NTSTATUS AcDispatchCreate(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 static NTSTATUS AcDispatchClose(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 {
     if (AcIsFilterDevice(DeviceObject))
+    {
+        AcLogWrite("CLOSE on filter device: DevObj=%p", DeviceObject);
         return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
+    }
 
-    DbgPrint("[PhantiCheat] Device closed.\n");
+    AcLogWrite("Device closed (control device).");
+
+    Irp->IoStatus.Status = STATUS_SUCCESS;
+    Irp->IoStatus.Information = 0;
+    IoCompleteRequest(Irp, IO_NO_INCREMENT);
+    return STATUS_SUCCESS;
+}
+
+// ---------------------------------------------------------------------------
+// IRP_MJ_CLEANUP - sent when a handle is being closed, including on process
+// crash. This is our signal to detach filters and go inert when the client
+// exits unexpectedly. Windows guarantees CLEANUP is sent even if the process
+// is killed or crashes.
+// ---------------------------------------------------------------------------
+static NTSTATUS AcDispatchCleanup(PDEVICE_OBJECT DeviceObject, PIRP Irp)
+{
+    if (AcIsFilterDevice(DeviceObject))
+    {
+        AcLogWrite("CLEANUP on filter device: DevObj=%p", DeviceObject);
+        return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
+    }
+
+    // Control device cleanup: our client is exiting (or crashed)
+    AcLogWrite("CLEANUP on control device. ClientPID=%lu CurrentPID=%lu -- detaching filters.",
+               (ULONG)(ULONG_PTR)g_ClientProcessId,
+               (ULONG)(ULONG_PTR)PsGetCurrentProcessId());
+
+    // Detach input filters so the keyboard/mouse stacks are clean.
+    // The driver module stays loaded but is inert until the service is stopped.
+    AcInputMonitorDetach();
+    g_ClientProcessId = NULL;
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = 0;
@@ -215,12 +292,17 @@ static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
 
     // Filter devices don't handle our IOCTLs - pass through
     if (AcIsFilterDevice(DeviceObject))
+    {
+        AcLogWrite("DEVCTL on filter device: DevObj=%p (passthrough)", DeviceObject);
         return AcInputMonitorDispatchPassthrough(DeviceObject, Irp);
+    }
 
     irpSp = IoGetCurrentIrpStackLocation(Irp);
     ioControlCode = irpSp->Parameters.DeviceIoControl.IoControlCode;
     outputLength = irpSp->Parameters.DeviceIoControl.OutputBufferLength;
     outputBuffer = Irp->AssociatedIrp.SystemBuffer;
+
+    AcLogWrite("IOCTL: code=0x%08X outLen=%lu outBuf=%p", ioControlCode, outputLength, outputBuffer);
 
     switch (ioControlCode)
     {
@@ -228,7 +310,7 @@ static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     {
         AC_DRIVER_STATUS driverStatus;
 
-        if (outputLength < sizeof(AC_DRIVER_STATUS))
+        if (outputLength < sizeof(AC_DRIVER_STATUS) || outputBuffer == NULL)
         {
             status = STATUS_BUFFER_TOO_SMALL;
             break;
@@ -249,7 +331,7 @@ static NTSTATUS AcDispatchDeviceControl(PDEVICE_OBJECT DeviceObject, PIRP Irp)
     {
         AC_TELEMETRY_RESPONSE response;
 
-        if (outputLength < sizeof(AC_TELEMETRY_RESPONSE))
+        if (outputLength < sizeof(AC_TELEMETRY_RESPONSE) || outputBuffer == NULL)
         {
             status = STATUS_BUFFER_TOO_SMALL;
             break;

@@ -62,7 +62,39 @@ exit /b 1
 :done
 if errorlevel 1 (
     echo BUILD FAILED.
+    PAUSE
     exit /b 1
 )
 echo BUILD SUCCEEDED. Output: bin_win32\
+
+:: ---- Post-build: generate anticheat hash config ----
+echo.
+echo Generating anticheat hash config...
+
+:: Resolve cl.exe via vswhere + vcvarsall
+for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -property installationPath`) do set "VSINSTALL=%%i"
+if not defined VSINSTALL (
+    echo WARNING: Cannot find VS installation for hashgen build. Skipping hash generation.
+    goto :skip_hashgen
+)
+
+:: Build hashgen.exe using the VS developer environment
+call "%VSINSTALL%\VC\Auxiliary\Build\vcvarsall.bat" x86 >nul 2>&1
+cl.exe /nologo /O2 /Fe:"%~dp0bin_win32\hashgen.exe" "%~dp0source\tools\hashgen.c" >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: Failed to compile hashgen.exe. Skipping hash generation.
+    goto :skip_hashgen
+)
+
+:: Run hashgen to produce config/anticheat.cfg
+"%~dp0bin_win32\hashgen.exe" "%~dp0bin_win32\ac_client.exe" "%~dp0config\anticheat.cfg"
+if errorlevel 1 (
+    echo WARNING: hashgen failed. config\anticheat.cfg may be missing.
+)
+
+:: Clean up build artifacts
+if exist "%~dp0hashgen.obj" del "%~dp0hashgen.obj"
+
+:skip_hashgen
+PAUSE
 exit /b 0

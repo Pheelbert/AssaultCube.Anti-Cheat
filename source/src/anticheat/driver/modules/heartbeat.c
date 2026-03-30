@@ -7,6 +7,7 @@
 
 #include <ntddk.h>
 #include "../../ac_shared.h"
+#include "../ac_log.h"
 #include "../scan_engine.h"
 
 // Defined in driver_main.c

@@ -1,4 +1,5 @@
 #include "scan_engine.h"
+#include "ac_log.h"
 
 // Static storage for registered modules
 static AC_SCAN_MODULE g_Modules[AC_MAX_SCAN_MODULES];
@@ -16,7 +17,7 @@ NTSTATUS AcScanEngineRegisterModule(const AC_SCAN_MODULE* Module)
     g_Modules[g_ModuleCount] = *Module;
     g_ModuleCount++;
 
-    DbgPrint("[PhantiCheat] Registered scan module: %s (type=%lu)\n",
+    AcLogWrite("Registered scan module: %s (type=%lu)",
              Module->Name ? Module->Name : "unnamed", Module->Type);
 
     return STATUS_SUCCESS;
@@ -46,7 +47,7 @@ NTSTATUS AcScanEngineExecuteAll(AC_TELEMETRY_RESPONSE* Response)
         }
         else
         {
-            DbgPrint("[PhantiCheat] Module '%s' failed with status 0x%08X\n",
+            AcLogWrite("Module '%s' failed with status 0x%08X",
                      g_Modules[i].Name ? g_Modules[i].Name : "unnamed", status);
         }
     }
@@ -73,26 +74,26 @@ NTSTATUS AcScanEngineInit(void)
     g_ScanCount = 0;
     RtlZeroMemory(g_Modules, sizeof(g_Modules));
 
-    DbgPrint("[PhantiCheat] Initializing scan engine...\n");
+    AcLogWrite("Initializing scan engine...");
 
     status = AcRegisterWindowsVersionModule();
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] Failed to register WindowsVersion module: 0x%08X\n", status);
+        AcLogWrite("Failed to register WindowsVersion module: 0x%08X", status);
     }
 
     status = AcRegisterHeartbeatModule();
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] Failed to register Heartbeat module: 0x%08X\n", status);
+        AcLogWrite("Failed to register Heartbeat module: 0x%08X", status);
     }
 
     status = AcRegisterInputMonitorModule();
     if (!NT_SUCCESS(status))
     {
-        DbgPrint("[PhantiCheat] Failed to register InputMonitor module: 0x%08X\n", status);
+        AcLogWrite("Failed to register InputMonitor module: 0x%08X", status);
     }
 
-    DbgPrint("[PhantiCheat] Scan engine initialized with %lu modules.\n", g_ModuleCount);
+    AcLogWrite("Scan engine initialized with %lu modules.", g_ModuleCount);
     return STATUS_SUCCESS;
 }

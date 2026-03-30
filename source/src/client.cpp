@@ -16,8 +16,24 @@ VAR(connected, 1, 0, 0);
 static PhantiCheat::DriverLoader *g_driverLoader = NULL;
 static PhantiCheat::AntiCheatManager *g_antiCheatManager = NULL;
 
+// Write an error to C:\phanticheat_client.log so it persists after the game exits.
+// The fatal() dialog closes too fast to read on startup crashes.
+static void acLogClient(const char *msg)
+{
+    FILE *f = fopen("C:\\phanticheat_client.log", "a");
+    if (f)
+    {
+        fprintf(f, "[PhantiCheat] %s\n", msg);
+        fflush(f);
+        fclose(f);
+    }
+    fprintf(stderr, "[PhantiCheat] %s\n", msg);
+}
+
 void initanticheat()
 {
+    acLogClient("initanticheat() starting...");
+
     if (!g_driverLoader)
     {
         g_driverLoader = new PhantiCheat::DriverLoader();
@@ -26,9 +42,11 @@ void initanticheat()
         {
             delete g_driverLoader;
             g_driverLoader = NULL;
+            acLogClient(errorMsg.c_str());
             fatal("PhantiCheat: %s", errorMsg.c_str());
             return;
         }
+        acLogClient("Driver loaded OK.");
     }
 
     if (!g_antiCheatManager)
@@ -38,10 +56,14 @@ void initanticheat()
         {
             delete g_antiCheatManager;
             g_antiCheatManager = NULL;
+            acLogClient("Driver loaded but device communication failed.");
             fatal("PhantiCheat: driver loaded but device communication failed.");
             return;
         }
+        acLogClient("AntiCheatManager initialized OK.");
     }
+
+    acLogClient("initanticheat() complete.");
 }
 
 void shutdownanticheat()

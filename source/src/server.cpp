@@ -3385,6 +3385,12 @@ void process(ENetPacket *packet, int sender, int chan)
                 getstring(clientHash, p, sizeof(clientHash));
                 clientHash[sizeof(clientHash) - 1] = '\0';
 
+                if (identifierEnum >= (int)hashList.size())
+                {
+                    // No hashes configured (anticheat.cfg missing or incomplete) - skip validation
+                    break;
+                }
+
                 const char* expectedHash = hashList[identifierEnum].c_str();
                 if (strcmp(clientHash, expectedHash) != 0)
                 {

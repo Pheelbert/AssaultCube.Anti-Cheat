@@ -99,6 +99,7 @@
   <!-- Source files                                                        -->
   <!-- ================================================================== -->
   <ItemGroup>
+    <ClCompile Include="ac_log.c" />
     <ClCompile Include="driver_main.c" />
     <ClCompile Include="scan_engine.c" />
     <ClCompile Include="modules\heartbeat.c" />
@@ -110,6 +111,7 @@
   <!-- Header files                                                        -->
   <!-- ================================================================== -->
   <ItemGroup>
+    <ClInclude Include="ac_log.h" />
     <ClInclude Include="scan_engine.h" />
     <ClInclude Include="..\ac_shared.h" />
     <ClInclude Include="..\ac_telemetry_types.h" />
