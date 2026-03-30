@@ -9,10 +9,10 @@
 void cleanup(char *msg)         // single program exit point;
 {
     if(clientlogfile) clientlogfile->fflush();
+    extern void shutdownanticheat();
+    shutdownanticheat();
     if(!msg)
     {
-        extern void shutdownanticheat();
-        shutdownanticheat();
         cleanupclient();
         audiomgr.soundcleanup();
         cleanupserver();

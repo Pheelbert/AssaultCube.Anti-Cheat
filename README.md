@@ -4,19 +4,15 @@
 
 - **Visual Studio 2019+** (or Visual Studio Build Tools) with the **C++ Desktop** workload installed
 
-### Using build.bat
+### Using build_client.bat
 
 Open a command prompt in the repository root and run:
 
 ```batch
-build.bat                  # Build Release client (default)
-build.bat debug            # Build Debug client
-build.bat release          # Build Release client (explicit)
-build.bat server           # Build Release server (Standalone)
-build.bat server debug     # Build Debug server (Standalone Debug)
-build.bat all              # Build Release client + server
-build.bat all debug        # Build Debug client + server
-build.bat clean            # Clean all build artifacts
+build_client.bat              # Build Release client (default)
+build_client.bat debug        # Build Debug client
+build_client.bat release      # Build Release client (explicit)
+build_client.bat clean        # Clean all build artifacts
 ```
 
 The script auto-detects your MSBuild installation via `vswhere.exe`. Build output is placed in `bin_win32/`.
@@ -36,7 +32,7 @@ The driver project is at `source/src/anticheat/driver/phanticheat.vcxproj`. Buil
 msbuild source\src\anticheat\driver\phanticheat.vcxproj /p:Configuration=Release /p:Platform=x64
 ```
 
-Or open the `.vcxproj` in Visual Studio and build from there. Output is placed in `bin_win32/driver/Release/` as `phanticheat.sys`.
+Or open the `.vcxproj` in Visual Studio and build from there. Output is placed in `bin_win32/` as `phanticheat.sys`, alongside `ac_client.exe`.
 
 ## Linux Server Deployment with Docker
 

@@ -1,0 +1,5 @@
+C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\driver_main.c;C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\Release\phanticheat\driver_main.obj
+C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\scan_engine.c;C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\Release\phanticheat\scan_engine.obj
+C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\modules\heartbeat.c;C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\Release\phanticheat\heartbeat.obj
+C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\modules\windows_version.c;C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\Release\phanticheat\windows_version.obj
+C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\modules\input_monitor.c;C:\Users\damie\OneDrive\Documents\AssaultCube.Anti-Cheat\source\src\anticheat\driver\Release\phanticheat\input_monitor.obj

@@ -6,16 +6,31 @@
 #include "anticheat/MemoryIntegrityChecker.h"
 #include "anticheat/FileUtil.h"
 #ifdef WIN32
+#include "anticheat/DriverLoader.h"
 #include "anticheat/AntiCheatManager.h"
 #endif
 
 VAR(connected, 1, 0, 0);
 
 #ifdef WIN32
+static PhantiCheat::DriverLoader *g_driverLoader = NULL;
 static PhantiCheat::AntiCheatManager *g_antiCheatManager = NULL;
 
 void initanticheat()
 {
+    if (!g_driverLoader)
+    {
+        g_driverLoader = new PhantiCheat::DriverLoader();
+        std::string errorMsg;
+        if (!g_driverLoader->load(errorMsg))
+        {
+            delete g_driverLoader;
+            g_driverLoader = NULL;
+            fatal("PhantiCheat: %s", errorMsg.c_str());
+            return;
+        }
+    }
+
     if (!g_antiCheatManager)
     {
         g_antiCheatManager = new PhantiCheat::AntiCheatManager();
@@ -23,7 +38,7 @@ void initanticheat()
         {
             delete g_antiCheatManager;
             g_antiCheatManager = NULL;
-            fatal("PhantiCheat anti-cheat driver is not running. Please load phanticheat.sys before launching the game.");
+            fatal("PhantiCheat: driver loaded but device communication failed.");
             return;
         }
     }
@@ -36,6 +51,13 @@ void shutdownanticheat()
         g_antiCheatManager->shutdown();
         delete g_antiCheatManager;
         g_antiCheatManager = NULL;
+    }
+
+    if (g_driverLoader)
+    {
+        g_driverLoader->unload();
+        delete g_driverLoader;
+        g_driverLoader = NULL;
     }
 }
 bool initanticheatinput(HWND hwnd)

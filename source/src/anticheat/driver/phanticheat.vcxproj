@@ -54,7 +54,7 @@
   <!-- Output                                                              -->
   <!-- ================================================================== -->
   <PropertyGroup>
-    <OutDir>$(ProjectDir)..\..\..\..\bin_win32\driver\$(Configuration)\</OutDir>
+    <OutDir>$(ProjectDir)..\..\..\..\bin_win32\</OutDir>
     <IntDir>$(Configuration)\$(ProjectName)\</IntDir>
     <TargetName>phanticheat</TargetName>
     <TargetExt>.sys</TargetExt>
