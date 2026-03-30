@@ -263,6 +263,13 @@ void AcInputMonitorDetach(void)
         g_MouseFilterDevice = NULL;
     }
 
+    // Flush all queued DPCs across all processors before returning.
+    // The I/O manager may have queued DPCs as part of IRP completion
+    // processing that reference our completion routine code. If the
+    // driver image is unloaded before these DPCs execute, BSOD.
+    AcLogWrite("InputMon: Flushing queued DPCs...");
+    KeFlushQueuedDpcs();
+
     AcLogWrite("InputMon: Filter devices detached.");
 }
 
@@ -334,9 +341,15 @@ NTSTATUS AcInputMonitorDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp
     PDEVICE_OBJECT target = NULL;
     PIO_REMOVE_LOCK removeLock = NULL;
     NTSTATUS status;
+    PIO_STACK_LOCATION irpSp = IoGetCurrentIrpStackLocation(Irp);
 
-    // Reject new IRPs if we are detaching
-    if (InterlockedCompareExchange(&g_Detaching, 0, 0) != 0)
+    // Filter drivers MUST pass PnP and Power IRPs down the stack
+    // unconditionally - even during teardown.
+    BOOLEAN mustPassDown = (irpSp->MajorFunction == IRP_MJ_PNP ||
+                            irpSp->MajorFunction == IRP_MJ_POWER);
+
+    // Reject new IRPs if we are detaching (except PnP/Power)
+    if (!mustPassDown && InterlockedCompareExchange(&g_Detaching, 0, 0) != 0)
         goto complete_error;
 
     if (DeviceObject == g_KeyboardFilterDevice)
@@ -352,6 +365,18 @@ NTSTATUS AcInputMonitorDispatchPassthrough(PDEVICE_OBJECT DeviceObject, PIRP Irp
 
     if (target && removeLock)
     {
+        // During detach, PnP/Power IRPs bypass the remove lock so they
+        // don't block the drain.  The target pointer is still valid
+        // because IoDetachDevice has not been called yet (it waits
+        // behind IoReleaseRemoveLockAndWait).
+        if (mustPassDown && InterlockedCompareExchange(&g_Detaching, 0, 0) != 0)
+        {
+            IoSkipCurrentIrpStackLocation(Irp);
+            if (irpSp->MajorFunction == IRP_MJ_POWER)
+                return PoCallDriver(target, Irp);
+            return IoCallDriver(target, Irp);
+        }
+
         status = IoAcquireRemoveLock(removeLock, Irp);
         if (!NT_SUCCESS(status))
             goto complete_error;

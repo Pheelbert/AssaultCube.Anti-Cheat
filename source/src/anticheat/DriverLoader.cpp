@@ -189,17 +189,16 @@ namespace PhantiCheat {
     {
         if (m_service)
         {
-            SERVICE_STATUS status;
-            ControlService(m_service, SERVICE_CONTROL_STOP, &status);
-
-            // Wait up to 5 seconds for it to stop
-            for (int i = 0; i < 50; i++)
-            {
-                if (QueryServiceStatus(m_service, &status) && status.dwCurrentState == SERVICE_STOPPED)
-                    break;
-                Sleep(100);
-            }
-
+            // Do NOT stop the service here. The game's CloseHandle already
+            // triggered CLEANUP in the kernel which detached input filters,
+            // leaving the driver loaded but inert. Unloading the driver
+            // image while pending keyboard/mouse IRPs still hold completion
+            // routine pointers into our code causes a BSOD seconds later
+            // when the user presses a key.
+            //
+            // Mark the service for deletion so it doesn't persist across
+            // reboots. cleanupExistingService() on next launch will stop
+            // and fully remove the stale driver.
             DeleteService(m_service);
             CloseServiceHandle(m_service);
             m_service = NULL;

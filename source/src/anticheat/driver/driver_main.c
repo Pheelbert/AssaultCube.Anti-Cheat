@@ -157,6 +157,10 @@ static void AcDriverUnload(PDRIVER_OBJECT DriverObject)
     AcInputMonitorDetach();
     AcLogWrite("Input monitor detached.");
 
+    // Belt-and-suspenders: flush DPCs again before deleting the control
+    // device and allowing the driver image to be unloaded.
+    KeFlushQueuedDpcs();
+
     RtlInitUnicodeString(&symlinkName, AC_SYMLINK_NAME);
     IoDeleteSymbolicLink(&symlinkName);
     AcLogWrite("Symbolic link deleted.");
