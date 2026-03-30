@@ -113,6 +113,12 @@ namespace PhantiCheat {
         // and mouse buttons.  Call once per frame or per snapshot interval.
         void pollKeyState();
 
+        // Feed kernel-level input data from the driver's input monitor module.
+        // Called by AntiCheatManager when it receives AC_TELEMETRY_KERNEL_INPUT
+        // entries from the driver telemetry response. This enables cross-layer
+        // comparison between Layer 0 (kernel IRP) and Layers 1-4 (user-mode).
+        void feedKernelInputData(const AC_KERNEL_INPUT_DATA &data);
+
         bool isActive() const { return m_active.load(); }
 
         // Debug simulation: configure artificial anomaly injection.
@@ -142,6 +148,12 @@ namespace PhantiCheat {
         // Mouse buttons: VK_LBUTTON(1), VK_RBUTTON(2), VK_MBUTTON(4),
         //                VK_XBUTTON1(5), VK_XBUTTON2(6)
         bool m_prevMouseState[8];
+
+        // Layer 0 (kernel IRP) data from the driver's input monitor module.
+        // Updated by feedKernelInputData(), consumed and reset by snapshot().
+        std::mutex m_kernelDataMutex;
+        bool m_hasKernelData;
+        AC_KERNEL_INPUT_DATA m_kernelData;
 
         InputTracker(const InputTracker&) = delete;
         InputTracker& operator=(const InputTracker&) = delete;

@@ -55,6 +55,28 @@ void recordInputTelemetry(PostProcessState &pps, const AcInputAnomalyData *data)
     pps.inputActivity.snapshotsReceived++;
 }
 
+void recordKernelInputTelemetry(PostProcessState &pps, const AcKernelInputData *data)
+{
+    pps.inputActivity.totalKernelHardwareKeyIrps   += data->HardwareIrpCount;
+    pps.inputActivity.totalKernelSoftwareKeyIrps   += data->SoftwareIrpCount;
+    pps.inputActivity.totalKernelHardwareMouseIrps += data->HardwareMouseIrpCount;
+    pps.inputActivity.totalKernelSoftwareMouseIrps += data->SoftwareMouseIrpCount;
+    pps.inputActivity.kernelAnomalyFlagsUnion      |= data->AnomalyFlags;
+    pps.inputActivity.kernelSnapshotsReceived++;
+
+    // Track minimum inter-keystroke timing across the window
+    if (data->MinInterKeystrokeUs > 0 &&
+        data->MinInterKeystrokeUs < pps.inputActivity.kernelMinInterKeystrokeUs)
+    {
+        pps.inputActivity.kernelMinInterKeystrokeUs = data->MinInterKeystrokeUs;
+    }
+    if (data->MinInterMouseUs > 0 &&
+        data->MinInterMouseUs < pps.inputActivity.kernelMinInterMouseUs)
+    {
+        pps.inputActivity.kernelMinInterMouseUs = data->MinInterMouseUs;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Individual rules
 // ---------------------------------------------------------------------------
@@ -134,6 +156,60 @@ static void ruleActionWithoutKeystate(const PostProcessState &pps, PPEvalResult 
     }
 }
 
+// Rule: kernel driver detected software-injected IRPs during a window with shots.
+// Kernel-level inject means a cheat driver is feeding fake keystrokes/mouse data
+// directly into the I/O manager -- invisible to all user-mode detection.
+static void ruleKernelInputInject(const PostProcessState &pps, PPEvalResult &result)
+{
+    if (pps.inputActivity.kernelSnapshotsReceived == 0) return;
+
+    uint32_t softwareIrps = pps.inputActivity.totalKernelSoftwareKeyIrps
+                          + pps.inputActivity.totalKernelSoftwareMouseIrps;
+
+    if (softwareIrps > 0 && pps.gameActivity.shots > 0)
+    {
+        result.addRule(PP_ANOMALY_KERNEL_INPUT_INJECT, PP_SEV_HIGH,
+                       "kernel driver detected software-injected IRPs during active gameplay");
+    }
+    else if (softwareIrps > 0)
+    {
+        result.addRule(PP_ANOMALY_KERNEL_INPUT_INJECT, PP_SEV_SUSPECT,
+                       "kernel driver detected software-injected input IRPs");
+    }
+}
+
+// Rule: unknown filter drivers detected in the keyboard/mouse device stack.
+// Legitimate systems rarely have non-standard filter drivers on the input stack.
+static void ruleKernelDevstackTamper(const PostProcessState &pps, PPEvalResult &result)
+{
+    if (pps.inputActivity.kernelSnapshotsReceived == 0) return;
+
+    if (pps.inputActivity.kernelAnomalyFlagsUnion & AC_ANOMALY_KERNEL_DEVSTACK_TAMPER)
+    {
+        result.addRule(PP_ANOMALY_KERNEL_DEVSTACK_TAMPER, PP_SEV_SUSPECT,
+                       "unknown filter driver(s) detected in keyboard/mouse device stack");
+    }
+}
+
+// Rule: inhuman inter-keystroke or inter-click timing at the I/O manager level.
+// Sub-500us keyboard or sub-1ms mouse timing is physically impossible and
+// indicates automated input generation from software.
+static void ruleKernelTimingInhuman(const PostProcessState &pps, PPEvalResult &result)
+{
+    if (pps.inputActivity.kernelSnapshotsReceived == 0) return;
+
+    if (pps.inputActivity.kernelAnomalyFlagsUnion & AC_ANOMALY_KERNEL_TIMING_INHUMAN)
+    {
+        PPSeverity sev = PP_SEV_SUSPECT;
+        // If inhuman timing coincides with shots fired, escalate severity
+        if (pps.gameActivity.shots > 0)
+            sev = PP_SEV_HIGH;
+
+        result.addRule(PP_ANOMALY_KERNEL_TIMING_INHUMAN, sev,
+                       "inhuman inter-keystroke/click timing detected at kernel I/O level");
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Evaluation entry point
 // ---------------------------------------------------------------------------
@@ -146,6 +222,9 @@ bool evaluate(const PostProcessState &pps, PPEvalResult &result)
     ruleHitsWithoutMouse(pps, result);
     rulePerfectAccuracy(pps, result);
     ruleActionWithoutKeystate(pps, result);
+    ruleKernelInputInject(pps, result);
+    ruleKernelDevstackTamper(pps, result);
+    ruleKernelTimingInhuman(pps, result);
 
     return result.anomalyFlags != PP_ANOMALY_NONE;
 }

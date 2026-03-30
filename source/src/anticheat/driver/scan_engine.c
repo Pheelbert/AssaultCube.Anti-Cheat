@@ -87,6 +87,12 @@ NTSTATUS AcScanEngineInit(void)
         DbgPrint("[PhantiCheat] Failed to register Heartbeat module: 0x%08X\n", status);
     }
 
+    status = AcRegisterInputMonitorModule();
+    if (!NT_SUCCESS(status))
+    {
+        DbgPrint("[PhantiCheat] Failed to register InputMonitor module: 0x%08X\n", status);
+    }
+
     DbgPrint("[PhantiCheat] Scan engine initialized with %lu modules.\n", g_ModuleCount);
     return STATUS_SUCCESS;
 }

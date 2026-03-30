@@ -157,6 +157,18 @@ namespace PhantiCheat {
 
                 if (ok && bytesReturned == sizeof(AC_TELEMETRY_RESPONSE) && response.EntryCount > 0)
                 {
+                    // Scan for kernel input telemetry and feed to InputTracker
+                    for (ULONG i = 0; i < response.EntryCount; i++)
+                    {
+                        if (response.Entries[i].Type == AC_TELEMETRY_KERNEL_INPUT &&
+                            response.Entries[i].DataLength >= sizeof(AC_KERNEL_INPUT_DATA))
+                        {
+                            AC_KERNEL_INPUT_DATA kernelData;
+                            memcpy(&kernelData, response.Entries[i].Data, sizeof(AC_KERNEL_INPUT_DATA));
+                            m_inputTracker.feedKernelInputData(kernelData);
+                        }
+                    }
+
                     std::lock_guard<std::mutex> lock(m_mutex);
 
                     // Drop oldest if queue is full

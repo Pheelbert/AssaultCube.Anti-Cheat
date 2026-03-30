@@ -3467,6 +3467,24 @@ void process(ENetPacket *packet, int sender, int chan)
                         }
                         break;
                     }
+                    case AC_TELEMETRY_KERNEL_INPUT:
+                    {
+                        if (dataLength >= (int)sizeof(AcKernelInputData))
+                        {
+                            const AcKernelInputData *ki = (const AcKernelInputData *)&rawData[0];
+                            PostProcess::recordKernelInputTelemetry(cl->ppState, ki);
+                            if (ki->AnomalyFlags != 0)
+                            {
+                                mlog(ACLOG_INFO, "[%s] %s kernel input anomaly: flags=0x%x hwK=%u swK=%u hwM=%u swM=%u minKeyUs=%u",
+                                     cl->hostname, cl->name,
+                                     ki->AnomalyFlags,
+                                     ki->HardwareIrpCount, ki->SoftwareIrpCount,
+                                     ki->HardwareMouseIrpCount, ki->SoftwareMouseIrpCount,
+                                     ki->MinInterKeystrokeUs);
+                            }
+                        }
+                        break;
+                    }
                     default:
                         mlog(ACLOG_VERBOSE, "[%s] %s sent unknown telemetry type %d (%d bytes)",
                              cl->hostname, cl->name, telemetryType, dataLength);

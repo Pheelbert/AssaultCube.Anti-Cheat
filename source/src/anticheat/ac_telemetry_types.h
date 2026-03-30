@@ -16,6 +16,7 @@
 #define AC_TELEMETRY_HEARTBEAT        2
 #define AC_TELEMETRY_INPUT_ANOMALY    3
 #define AC_TELEMETRY_INPUT_DEBUG      4
+#define AC_TELEMETRY_KERNEL_INPUT     5
 
 #define AC_MAX_TELEMETRY_DATA         256
 
@@ -52,6 +53,19 @@ typedef struct {
     uint32_t AnomalyFlags;
 } AcInputAnomalyData;
 
+// Kernel input telemetry payload (Layer 0 - from driver IRP interception)
+typedef struct {
+    uint32_t HardwareIrpCount;
+    uint32_t SoftwareIrpCount;
+    uint32_t HardwareMouseIrpCount;
+    uint32_t SoftwareMouseIrpCount;
+    uint32_t FilterDriversInStack;
+    uint32_t UnknownFilterDrivers;
+    uint32_t MinInterKeystrokeUs;
+    uint32_t MinInterMouseUs;
+    uint32_t AnomalyFlags;
+} AcKernelInputData;
+
 // Anomaly flag constants (must match ac_shared.h)
 #define AC_ANOMALY_NONE                  0x00000000
 #define AC_ANOMALY_SDL_WITHOUT_RAW       0x00000001
@@ -61,6 +75,12 @@ typedef struct {
 #define AC_ANOMALY_KEYSTATE_WITHOUT_SDL  0x00000010
 #define AC_ANOMALY_LAYER_COUNT_MISMATCH  0x00000020
 #define AC_ANOMALY_DEBUG_SIMULATED       0x80000000
+
+// Kernel-layer anomaly flags (must match ac_shared.h)
+#define AC_ANOMALY_KERNEL_DEVSTACK_TAMPER  0x00000040
+#define AC_ANOMALY_KERNEL_IRQ_MISMATCH     0x00000080
+#define AC_ANOMALY_KERNEL_INJECT_DETECTED  0x00000100
+#define AC_ANOMALY_KERNEL_TIMING_INHUMAN   0x00000200
 
 // Debug simulation config payload
 typedef struct {
