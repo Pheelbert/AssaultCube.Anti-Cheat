@@ -31,6 +31,7 @@
 
 -Y AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA // this default value is a security risk so please define your own private server key (!!)
 
+
 // the switches o, n, n1 and n2 support coloring and character escaping; 'o' also supports escaped newlines
 // the available colors are: 0: green, 1: blue, 2: yellow, 3: red, 4: gray, 5: white, 6: dark brown, 7: dark red
 // example multiline MOTD: -o line 1\nline 2\nline 3

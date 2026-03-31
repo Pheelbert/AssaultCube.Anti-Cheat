@@ -3311,6 +3311,7 @@ void process(ENetPacket *packet, int sender, int chan)
         }
 
         if(cl->vita) cl->vita->addname(cl->name);
+        cl->isonrightmap = true; // trust all clients have the right map
         sendwelcome(cl);
         if(restorescore(*cl)) { sendresume(*cl, true); senddisconnectedscores(-1); }
         else if(cl->type==ST_TCPIP) senddisconnectedscores(sender);
@@ -5255,6 +5256,14 @@ void initserver(bool dedicated)
         // kill -1
         if (signal(SIGHUP, quitproc) == SIG_ERR) mlog(ACLOG_INFO, "Cannot handle SIGHUP!");
         #endif
+        // Pre-load a default map so the first connecting client gets a game immediately
+        if(!sg->smapname[0])
+        {
+            copystring(sg->smapname, "ac_complex");
+            sg->smode = GMODE_TEAMDEATHMATCH;
+            sg->gamelimit = 15 * 60 * 1000; // 15 minutes
+            mlog(ACLOG_INFO, "auto-set default map: TDM on ac_complex");
+        }
         mlog(ACLOG_INFO, "dedicated server started, waiting for clients...");
         mlog(ACLOG_INFO, "Ctrl-C to exit"); // this will now actually call the atexit-hooks below - thanks to SIGINT hooked above - noticed and signal-code-docs found by SKB:2011feb05:ft:
         atexit(enet_deinitialize);

@@ -10,6 +10,19 @@ services:
       - dashboard-data:/ac/data
     restart: unless-stopped
 
+  bot:
+    build: .
+    entrypoint: ["./bin_unix/bot_client"]
+    command: []
+    environment:
+      - SERVER_HOST=acserver
+      - SERVER_PORT=28763
+    depends_on:
+      - acserver
+    restart: unless-stopped
+    deploy:
+      replicas: 5
+
   dashboard:
     build: ./dashboard
     ports:

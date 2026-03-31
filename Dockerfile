@@ -15,7 +15,8 @@ COPY source/ source/
 
 RUN find source/ -type f -exec sed -i 's/\r$//' {} + \
     && chmod +x source/enet/configure source/enet/config.sub source/enet/config.guess source/enet/install-sh source/enet/depcomp \
-    && cd source/src && make clean && make server && make server_install
+    && cd source/src && make clean && make server && make server_install \
+    && clang -O2 -o /build/bin_unix/bot_client bot_client.c -I../enet/include -L../enet/.libs -lenet -lz -lm
 
 # --- Runtime stage ---
 FROM ubuntu:22.04
@@ -29,6 +30,7 @@ RUN useradd -r -s /usr/sbin/nologin acserver
 WORKDIR /ac
 
 COPY --from=builder /build/bin_unix/native_server bin_unix/native_server
+COPY --from=builder /build/bin_unix/bot_client bin_unix/bot_client
 COPY config/ config/
 COPY packages/maps/ packages/maps/
 

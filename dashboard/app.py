@@ -1103,11 +1103,12 @@ function teamClass(team) {
 
 function stateString(state) {
     switch(state) {
-        case 0: return '<span class="badge badge-dim">Dead</span>';
-        case 1: return '<span class="badge badge-green">Alive</span>';
-        case 2: return '<span class="badge badge-dim">Dead</span>';
+        case 0: return '<span class="badge badge-green">Alive</span>';
+        case 1: return '<span class="badge badge-dim">Dead</span>';
+        case 2: return '<span class="badge badge-dim">Spawning</span>';
+        case 3: return '<span class="badge badge-dim">Lagged</span>';
+        case 4: return '<span class="badge badge-orange">Editing</span>';
         case 5: return '<span class="badge badge-blue">Spectating</span>';
-        case 6: return '<span class="badge badge-orange">Editing</span>';
         default: return '<span class="badge badge-dim">Unknown</span>';
     }
 }

@@ -474,10 +474,10 @@ void filterlang(char *d, const char *s)
 
 void filtercountrycode(char *d, const char *s) // returns exactly two uppercase chars or "--"
 {
-    if(strlen(s) == 2 && isalpha(s[0]) && isalpha(s[1]))
+    if(s && strlen(s) == 2 && isalpha((unsigned char)s[0]) && isalpha((unsigned char)s[1]))
     {
-        d[0] = toupper(s[0]);
-        d[1] = toupper(s[1]);
+        d[0] = toupper((unsigned char)s[0]);
+        d[1] = toupper((unsigned char)s[1]);
     }
     else d[0] = d[1] = '-';
     d[2] = '\0';
