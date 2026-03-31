@@ -763,6 +763,27 @@ void sendspawn(client *c)
         gs.primary, gs.gunselect, m_arena ? c->spawnindex : -1,
         NUMGUNS, gs.ammo, NUMGUNS, gs.mag);
     gs.lastspawn = sg->gamemillis;
+
+    // Send spawn points to headless bots via SV_SERVMSG with a parseable format
+    // Format: "SPAWNPOINTS x1,y1,z1;x2,y2,z2;..."
+    if(sg->curmap && sg->curmap->enttypes)
+    {
+        string msg;
+        int off = 0;
+        off += snprintf(msg + off, sizeof(msg) - off, "SPAWNPOINTS ");
+        int count = 0;
+        for(int i = 0; i < sg->curmap->numents && off < (int)sizeof(msg) - 30; i++)
+        {
+            if(sg->curmap->enttypes[i] == PLAYERSTART)
+            {
+                if(count > 0) off += snprintf(msg + off, sizeof(msg) - off, ";");
+                off += snprintf(msg + off, sizeof(msg) - off, "%d,%d,%d",
+                    sg->curmap->entpos_x[i], sg->curmap->entpos_y[i], sg->curmap->entpos_z[i]);
+                count++;
+            }
+        }
+        if(count > 0) sendf(c->clientnum, 1, "ris", SV_SERVMSG, msg);
+    }
 }
 
 // simultaneous demo recording, fully buffered
@@ -4738,6 +4759,9 @@ void exportdashboardjson()
         fprintf(f, "      \"connected_seconds\": %d,\n", connectedsecs);
         fprintf(f, "      \"role\": %d,\n", c.role);
         fprintf(f, "      \"state\": %d,\n", c.state.state);
+        fprintf(f, "      \"pos_x\": %.1f,\n", c.state.o.x);
+        fprintf(f, "      \"pos_y\": %.1f,\n", c.state.o.y);
+        fprintf(f, "      \"pos_z\": %.1f,\n", c.state.o.z);
         fprintf(f, "      \"session_frags\": %d,\n", c.session_frags);
         fprintf(f, "      \"session_deaths\": %d,\n", c.session_deaths);
         fprintf(f, "      \"session_shotcount\": %d,\n", c.session_shotcount);

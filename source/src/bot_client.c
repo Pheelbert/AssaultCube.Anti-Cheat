@@ -42,7 +42,13 @@ enum {
 #define GUN_ASSAULT      6
 #define NUMGUNS          9
 #define DMF              16.0f
+#define DVELF            4.0f
 #define MAXTRANS         5000
+#define YAWBITS          10
+#define PITCHBITS        8
+#define FLAGBITS         11
+#define MAXPITCH         90.0f
+#define EYEHEIGHT        4.5f
 
 // --- Packet buffer ---
 typedef struct { unsigned char d[MAXTRANS]; int len, pos; } buf_t;
@@ -78,11 +84,52 @@ static void skip(buf_t *p, int n) { p->pos += n; if(p->pos > p->len) p->pos = p-
 
 static ENetPacket *pkt(buf_t *p, int flags) { return enet_packet_create(p->d, p->len, flags); }
 
+// --- Spawn points from server ---
+#define MAX_SPAWNS 64
+static struct { float x, y, z; } spawns[MAX_SPAWNS];
+static int num_spawns = 0;
+static int cur_target = -1;
+
+// Forward declarations for bot state used in parse_spawnpoints
+static float bx, by, bz;
+
+static void parse_spawnpoints(const char *msg) {
+    // Format: "SPAWNPOINTS x1,y1,z1;x2,y2,z2;..."
+    if(strncmp(msg, "SPAWNPOINTS ", 12) != 0) return;
+    const char *p = msg + 12;
+    num_spawns = 0;
+    while(*p && num_spawns < MAX_SPAWNS) {
+        int x, y, z;
+        if(sscanf(p, "%d,%d,%d", &x, &y, &z) == 3) {
+            spawns[num_spawns].x = (float)x;
+            spawns[num_spawns].y = (float)y;
+            spawns[num_spawns].z = (float)z;
+            num_spawns++;
+        }
+        while(*p && *p != ';') p++;
+        if(*p == ';') p++;
+    }
+    printf("  Got %d spawn points:", num_spawns);
+    int j; for(j = 0; j < num_spawns && j < 5; j++) printf(" (%.0f,%.0f,%.0f)", spawns[j].x, spawns[j].y, spawns[j].z);
+    printf("\n");
+    // Teleport to a random spawn point now
+    // Subtract eyeheight from z because entity z is eye-level position,
+    // but entinmap on real clients drops players to the floor.
+    // The floor is typically ~eyeheight below the entity z.
+    if(num_spawns > 0) {
+        int si = rand() % num_spawns;
+        bx = spawns[si].x; by = spawns[si].y; bz = spawns[si].z;
+        cur_target = (si + 1) % num_spawns;
+        printf("  Teleported to spawn %d (%.0f,%.0f,%.0f)\n", si, bx, by, bz);
+    }
+}
+
 // --- Bot state ---
 static int my_cn = -1, lifeseq = 0, gun = GUN_ASSAULT, alive = 0;
-static int map_gzs = 0, map_rev = 0; // for SV_MAPIDENT
-static float bx = 128, by = 128, bz = 4, yaw = 0, target_yaw = 0;
-static enet_uint32 last_pos = 0, last_ping = 0, last_spawn = 0;
+static int map_gzs = 0, map_rev = 0;
+// bx, by, bz declared above (forward decl for parse_spawnpoints)
+static float yaw = 0, target_yaw = 0;
+static enet_uint32 last_pos = 0, last_ping = 0, last_spawn = 0, last_yaw_change = 0;
 
 // --- Send helpers ---
 static void send_servinfo_resp(ENetPeer *peer) {
@@ -110,15 +157,38 @@ static void send_spawn(ENetPeer *peer) {
     buf_t p; buf_init(&p); putint(&p, SV_SPAWN); putint(&p, lifeseq); putint(&p, gun);
     enet_peer_send(peer, 1, pkt(&p, ENET_PACKET_FLAG_RELIABLE));
 }
+static int encode_yaw(float y) {
+    int r = (int)floorf(y * (1 << YAWBITS) / 360.0f + 0.5f);
+    return r & ((1 << YAWBITS) - 1);
+}
+static int encode_pitch(float p) {
+    int thres = (1 << 24) / 3;
+    int r = (int)(p * (1 << 24)) / (int)MAXPITCH;
+    if(r > thres) r = r / 4 + (1 << 22);
+    else if(r < -thres) r = r / 4 - (1 << 22);
+    r += (1 << 23) + (1 << (23 - PITCHBITS));
+    if(r < 0) r = 0;
+    else if(r >= (1 << 24)) r = (1 << 24) - 1;
+    return r >> (24 - PITCHBITS);
+}
 static void send_pos(ENetPeer *peer) {
+    int x = (int)floorf(bx * DMF + 0.5f);
+    int y = (int)floorf(by * DMF + 0.5f);
+    int z = (int)floorf((bz - EYEHEIGHT) * DMF + 0.5f);
+    int zsign = z < 0 ? 1 : 0;
+    if(zsign) z = -z;
+    int ya = encode_yaw(yaw);
+    int pi = encode_pitch(0.0f);
+    int f = (0 + 4 + 1 * 3) // strafe=0, move=forward
+        | ((lifeseq & 1) << 6) | (1 << 7) // onfloor + lifeseq lsb
+        | (zsign << 10);
+    unsigned long long packed = ((unsigned long long)ya << (FLAGBITS + PITCHBITS))
+                              | ((unsigned long long)pi << FLAGBITS)
+                              | (unsigned long long)f;
     buf_t p; buf_init(&p);
     putint(&p, SV_POS); putint(&p, my_cn);
-    putuint(&p, (unsigned)(bx * DMF)); putuint(&p, (unsigned)(by * DMF)); putuint(&p, (unsigned)(bz * DMF));
-    // orientation: yaw(10)|pitch(8)|flags(11) = 29 bits
-    int ye = ((int)yaw) & 0x3FF, pe = 90 & 0xFF;
-    int fl = (1 << 2) | ((lifeseq & 1) << 6) | (1 << 7); // move fwd + onfloor + lifeseq lsb
-    unsigned pk = (unsigned)ye | ((unsigned)pe << 10) | ((unsigned)fl << 18);
-    buf_put(&p, pk&0xFF); buf_put(&p, (pk>>8)&0xFF); buf_put(&p, (pk>>16)&0xFF); buf_put(&p, (pk>>24)&0xFF);
+    putuint(&p, (unsigned)x); putuint(&p, (unsigned)y); putuint(&p, (unsigned)z);
+    int i; for(i = 0; i < 4; i++) buf_put(&p, (packed >> (8*i)) & 0xFF);
     enet_peer_send(peer, 0, pkt(&p, 0));
 }
 static void send_ping(ENetPeer *peer) {
@@ -170,7 +240,17 @@ static void process(ENetPeer *peer, ENetPacket *ep) {
             int i; for(i=0;i<NUMGUNS;i++) getint(&p); for(i=0;i<NUMGUNS;i++) getint(&p);
             printf("  SPAWNED lifeseq=%d\n", lifeseq);
             send_spawn(peer); alive=1;
-            bx=128+(rand()%64); by=128+(rand()%64); bz=4; yaw=(float)(rand()%360);
+            if(num_spawns > 0) {
+                int si = rand() % num_spawns;
+                bx = spawns[si].x; by = spawns[si].y; bz = spawns[si].z;
+                // Pick a different spawn as walk target
+                cur_target = (si + 1 + rand() % (num_spawns > 1 ? num_spawns - 1 : 1)) % num_spawns;
+                printf("  Starting at spawn %d (%.0f,%.0f,%.0f) -> target %d\n", si, bx, by, bz, cur_target);
+            } else {
+                bx=128; by=128; bz=8;
+                cur_target = -1;
+            }
+            yaw=(float)(rand()%360); target_yaw=yaw;
             break;
         }
         case SV_SPAWNDENY: getint(&p); last_spawn=enet_time_get(); break;
@@ -181,14 +261,34 @@ static void process(ENetPeer *peer, ENetPacket *ep) {
         case SV_PAUSEMODE: getint(&p); break;
         case SV_PONG: getint(&p); break;
         case SV_PING: { int v=getint(&p); buf_t r; buf_init(&r); putint(&r,SV_PONG); putint(&r,v); enet_peer_send(peer,1,pkt(&r,ENET_PACKET_FLAG_RELIABLE)); break; }
-        case SV_GIBDIED: case SV_DIED: { int t=getint(&p); getint(&p); getint(&p); getint(&p); if(t==my_cn) { alive=0; last_spawn=enet_time_get(); printf("  DIED\n"); } break; }
-        case SV_SERVMSG: case SV_SERVMSGVERB: skipstr(&p); break;
+        case SV_GIBDIED: case SV_DIED: {
+            int t=getint(&p); getint(&p); getint(&p); getint(&p);
+            if(t==my_cn) {
+                alive=0;
+                last_spawn=enet_time_get();
+                // Pick a new spawn point for next life
+                if(num_spawns > 0) {
+                    int si = rand() % num_spawns;
+                    bx = spawns[si].x; by = spawns[si].y; bz = spawns[si].z;
+                    cur_target = si;
+                }
+                printf("  DIED, will respawn at (%.0f,%.0f,%.0f)\n", bx, by, bz);
+            }
+            break;
+        }
+        case SV_SERVMSG: case SV_SERVMSGVERB: {
+            char msg[1024]; int mi = 0;
+            for(;;) { int c = getint(&p); if(!c || mi >= 1023) break; msg[mi++] = (char)c; }
+            msg[mi] = 0;
+            parse_spawnpoints(msg);
+            break;
+        }
         case SV_DISCSCORES: { int cn; while((cn=getint(&p))>=0) { skipstr(&p); getint(&p); getint(&p); getint(&p); getint(&p); } break; }
         case SV_SERVOPINFO: getint(&p); getint(&p); break;
         case SV_IPLIST: { int cn; while((cn=getint(&p))>=0) getint(&p); break; }
-        case SV_DAMAGE: case SV_GIBDAMAGE: { int i; for(i=0;i<5;i++) getint(&p); break; }
-        case SV_HITPUSH: { int i; for(i=0;i<6;i++) getint(&p); break; }
-        case SV_SHOTFX: { int i; for(i=0;i<8;i++) getint(&p); break; }
+        case SV_DAMAGE: case SV_GIBDAMAGE: { int i; for(i=0;i<6;i++) getint(&p); break; }
+        case SV_HITPUSH: { int i; for(i=0;i<5;i++) getint(&p); break; }
+        case SV_SHOTFX: { int i; for(i=0;i<5;i++) getint(&p); break; } // cn, gun, to_x, to_y, to_z
         case SV_ARENAWIN: getint(&p); break;
         case SV_ITEMACC: getint(&p); getint(&p); break;
         case SV_ITEMSPAWN: getint(&p); break;
@@ -196,7 +296,33 @@ static void process(ENetPeer *peer, ENetPacket *ep) {
         case SV_FLAGMSG: getint(&p); getint(&p); getint(&p); break;
         case SV_FLAGCNT: getint(&p); getint(&p); break;
         case SV_TEXT: case SV_TEAMTEXT: case SV_TEXTME: case SV_TEAMTEXTME: case SV_TEXTPRIVATE: getint(&p); skipstr(&p); break;
-        case SV_CLIENT: { getint(&p); int len=getint(&p); skip(&p, len); break; }
+        case SV_CLIENT: {
+            getint(&p); // source cn
+            int len = getint(&p);
+            // Parse inner messages - they may contain SV_DIED etc
+            int end = p.pos + len;
+            while(p.pos < end && p.pos < p.len) {
+                int inner = getint(&p);
+                if(inner == SV_GIBDIED || inner == SV_DIED) {
+                    int t=getint(&p); getint(&p); getint(&p); getint(&p);
+                    if(t==my_cn) {
+                        alive=0; last_spawn=enet_time_get();
+                        if(num_spawns > 0) {
+                            int si = rand() % num_spawns;
+                            bx = spawns[si].x; by = spawns[si].y; bz = spawns[si].z;
+                        }
+                        printf("  KILLED! Respawning...\n");
+                    }
+                } else {
+                    // Skip to end of SV_CLIENT data - can't parse unknown inner types
+                    p.pos = end;
+                    break;
+                }
+            }
+            p.pos = end; // ensure we're past the SV_CLIENT data
+            if(p.pos > p.len) p.pos = p.len;
+            break;
+        }
         case SV_SWITCHNAME: getint(&p); skipstr(&p); break;
         case SV_SWITCHSKIN: getint(&p); getint(&p); getint(&p); break;
         case SV_SWITCHTEAM: getint(&p); getint(&p); break;
@@ -276,19 +402,8 @@ int main(int argc, char **argv) {
             last_spawn = now;
         }
 
-        // Send position when alive
-        if(alive && now - last_pos > 100) {
-            // Wander
-            float dy = target_yaw - yaw;
-            if(dy > 180) dy -= 360; if(dy < -180) dy += 360;
-            yaw += dy * 0.05f;
-            if(yaw >= 360) yaw -= 360; if(yaw < 0) yaw += 360;
-            if(now % 4000 < 20) target_yaw = (float)(rand() % 360);
-            float r = yaw * 3.14159f / 180.0f;
-            bx += cosf(r) * 0.3f; by += sinf(r) * 0.3f;
-            if(bx < 32) bx = 32; if(bx > 224) bx = 224;
-            if(by < 32) by = 32; if(by > 224) by = 224;
-
+        // Send position when alive - only send once per second to stay registered
+        if(alive && now - last_pos > 1000) {
             send_pos(peer);
             last_pos = now;
         }

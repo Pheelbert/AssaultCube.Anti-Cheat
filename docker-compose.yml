@@ -21,7 +21,7 @@ services:
       - acserver
     restart: unless-stopped
     deploy:
-      replicas: 5
+      replicas: 10
 
   dashboard:
     build: ./dashboard

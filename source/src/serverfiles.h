@@ -82,7 +82,7 @@ struct servermap  // in-memory version of a map file on a server
     int x1, x2, y1, y2, zmin, zmax; // bounding box for player-reachable areas
 
     uchar *enttypes;                //             table of entity types
-    short *entpos_x, *entpos_y;
+    short *entpos_x, *entpos_y, *entpos_z;
 
     configsetvalues *hx_modeinfo;   // maprot parameters from map author
     uchar *hx_mapartist;            // pubkey of map artist
@@ -105,7 +105,7 @@ struct servermap  // in-memory version of a map file on a server
     #endif
 
     servermap(const char *mname, const char *mpath) { memset(&fname, 0, sizeof(struct servermap)); fname = newstring(mname); fpath = mpath; }
-    ~servermap() { delstring(fname); DELETEA(cgzraw); DELETEA(cfgrawgz); DELETEA(enttypes); DELETEA(entpos_x); DELETEA(entpos_y); DELETEA(layoutgz); DELETEA(hx_modeinfo); DELETEA(hx_mapartist); }
+    ~servermap() { delstring(fname); DELETEA(cgzraw); DELETEA(cfgrawgz); DELETEA(enttypes); DELETEA(entpos_x); DELETEA(entpos_y); DELETEA(entpos_z); DELETEA(layoutgz); DELETEA(hx_modeinfo); DELETEA(hx_mapartist); }
 
     bool isro() { return fpath == servermappath_off || fpath == servermappath_serv; }
     bool isofficial() { return fpath == servermappath_off; }
@@ -304,12 +304,14 @@ struct servermap  // in-memory version of a map file on a server
             enttypes = new uchar[numents];  // FIXME: cut this down to useful entities
             entpos_x = new short[numents];
             entpos_y = new short[numents];
+            entpos_z = new short[numents];
             loopi(numents)
             {
                 persistent_entity &e = es[i];
                 enttypes[i] = e.type >= MAXENTTYPES ? NOTUSED : e.type;
                 entpos_x[i] = e.x;
                 entpos_y[i] = e.y;
+                entpos_z[i] = e.z;
             }
             // respect map author wishes about disallowed modes
             if(hx_modeinfo) loopi(GMODE_NUM) if(hx_modeinfo[i].restrict == 81) entstats.modes_possible &= ~(1 << i); // disallowed by elvis^2

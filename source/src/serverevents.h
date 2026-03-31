@@ -69,7 +69,11 @@ void processevent(client *c, shotevent &e)
                 hitevent &h = c->events[i].hit;
                 if(!clients.inrange(h.target)) continue;
                 client *target = clients[h.target];
-                if(target->type==ST_EMPTY || target->state.state!=CS_ALIVE || h.lifesequence!=target->state.lifesequence) continue;
+                if(target->type==ST_EMPTY || target->state.state!=CS_ALIVE || h.lifesequence!=target->state.lifesequence)
+                {
+                    mlog(ACLOG_INFO, "[%s] hit on %s REJECTED: empty=%d state=%d hitls=%d targetls=%d", c->name, target->name, target->type==ST_EMPTY, target->state.state, h.lifesequence, target->state.lifesequence);
+                    continue;
+                }
 
                 int rays = 1, damage = 0;
                 bool gib = false;

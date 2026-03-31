@@ -29,6 +29,8 @@
 // -Y     // 32-byte private server key (you should maybe include that from another config file and remove it from the server after startup)
 // -m     // masterserver URL (no parameter uses default URL), if not set, the server will be LAN-only
 
+-c 16
+-kA 0
 -Y AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA // this default value is a security risk so please define your own private server key (!!)
 
 
